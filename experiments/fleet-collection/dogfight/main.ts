@@ -1,9 +1,10 @@
 import { createDogfight, stepDogfight, type Dogfight } from './model'
 import { mountLineups, readLineups } from '../battle/lineup'
 import { targetCamera, smoothCamera, type Camera } from './camera'
+import { coastY, riverX } from './city'
 import '../battle/style.css'
 const root=document.querySelector<HTMLElement>('#app')!
-root.innerHTML=`<header><a href="/">← 实验室</a> · <a href="/experiments/fleet-collection/battle/">原舰队战斗</a><h1>机动弹道对照实验</h1><p>相同舰体属性、情报与伤害公式 · 高速穿插 · 弹道可躲避</p></header><section class="controls"><label>种子 <input id="seed" type="number" value="42" step="1"></label><button id="reset">应用并重置</button><button id="play">暂停</button><button id="step">推进 0.1 秒</button><label>速度 <select id="speed"><option value="1">1×</option><option value="2">2×</option><option value="4" selected>4×</option><option value="8">8×</option></select></label><span id="status"></span></section><section class="fleet"><h2>双方编队</h2><p>双方各配置 1–6 艘；空位不出战。修改后点击“应用并重置”。</p><div id="lineup"></div></section><div class="layout"><section><canvas id="field" width="960" height="600" aria-label="狗斗战场"></canvas><p class="hint">三角＝驱逐、菱形＝巡洋、方形＝战列、飞机＝航空、双圆＝潜航；虚线连线表示空间层，方框为地形。弹幕碰到任意敌方舰船后，进行 ACC/EVA 命中判定并消失。</p><div id="ships"></div></section><aside><h2>战斗记录</h2><div id="events"></div></aside></div>`
+root.innerHTML=`<header><a href="/">← 实验室</a> · <a href="/experiments/fleet-collection/battle/">原舰队战斗</a><h1>机动弹道对照实验</h1><p>相同舰体属性、情报与伤害公式 · 高速穿插 · 弹道可躲避</p></header><section class="controls"><label>种子 <input id="seed" type="number" value="42" step="1"></label><label>地图种子 <input id="map-seed" type="number" value="17" step="1"></label><button id="reset">应用并重置</button><button id="play">暂停</button><button id="step">推进 0.1 秒</button><label>速度 <select id="speed"><option value="1">1×</option><option value="2">2×</option><option value="4" selected>4×</option><option value="8">8×</option></select></label><span id="status"></span></section><section class="fleet"><h2>双方编队</h2><p>双方各配置 1–6 艘；空位不出战。修改后点击“应用并重置”。</p><div id="lineup"></div></section><div class="layout"><section><canvas id="field" width="960" height="600" aria-label="狗斗战场"></canvas><p class="hint">三角＝驱逐、菱形＝巡洋、方形＝战列、飞机＝航空、双圆＝潜航；虚线连线表示空间层，方框为楼宇，海岸线为视觉地形。弹幕碰到任意敌方舰船后，进行 ACC/EVA 命中判定并消失。</p><div id="ships"></div></section><aside><h2>战斗记录</h2><div id="events"></div></aside></div>`
 const el=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T
 mountLineups(el('lineup'), true)
 const canvas=el<HTMLCanvasElement>('field'),ctx=canvas.getContext('2d')!
@@ -23,12 +24,28 @@ function drawScene(now: number) {
   lastFrame = now
   const point = (x: number, y: number) => ({ x: canvas.width / 2 + (x - camera.x) * camera.scale, y: canvas.height / 2 + (y - camera.y) * camera.scale })
   ctx.fillStyle = '#112635'; ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.strokeStyle = '#234155'; ctx.lineWidth = 1
+  // Render the same continuous coastline used by generation; land is south of the line.
+  const viewLeft = camera.x - canvas.width / (2 * camera.scale), viewRight = camera.x + canvas.width / (2 * camera.scale)
+  const coastStep = Math.max(10, (viewRight-viewLeft)/200)
+  const coast = []
+  for (let x = viewLeft; x < viewRight; x += coastStep) coast.push(point(x, coastY(battle.city.seed, x)))
+  coast.push(point(viewRight, coastY(battle.city.seed, viewRight)))
+  ctx.fillStyle = '#273e3b'; ctx.beginPath(); ctx.moveTo(coast[0].x, canvas.height); for (const p of coast) ctx.lineTo(p.x, p.y); ctx.lineTo(coast[coast.length-1].x, canvas.height); ctx.closePath(); ctx.fill()
+  ctx.strokeStyle = '#8aab93'; ctx.lineWidth = 3; ctx.beginPath(); coast.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.stroke()
+  // Draw connected river channels and lakes; roads are a global grid with bridges over water.
+  const worldTop = camera.y - canvas.height / (2 * camera.scale), worldBottom = camera.y + canvas.height / (2 * camera.scale)
+  for(let river=0;river<2;river++){
+    ctx.strokeStyle='#214b60';ctx.lineWidth=10*camera.scale;ctx.beginPath()
+    for(let i=0;i<=100;i++){const y=worldTop+(worldBottom-worldTop)*i/100,x=riverX(battle.city.seed,river,y),p=point(x,y);if(y>=coastY(battle.city.seed,x)){if(i===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y)}else ctx.moveTo(p.x,p.y)}ctx.stroke()
+    const first=Math.ceil((worldTop-100-river*60)/320),last=Math.floor((worldBottom-100-river*60)/320)
+    for(let k=first;k<=last && k<first+100;k++){const y=100+river*60+k*320,x=riverX(battle.city.seed,river,y);if(y<coastY(battle.city.seed,x))continue;const p=point(x,y);ctx.fillStyle='#214b60';ctx.beginPath();ctx.ellipse(p.x,p.y,16*camera.scale,12*camera.scale,0,0,Math.PI*2);ctx.fill()}
+  }
+  ctx.strokeStyle = '#405151'; ctx.lineWidth = Math.max(1, 2 * camera.scale)
   const left = camera.x - canvas.width / (2 * camera.scale), right = camera.x + canvas.width / (2 * camera.scale)
   const top = camera.y - canvas.height / (2 * camera.scale), bottom = camera.y + canvas.height / (2 * camera.scale)
-  for (let x = Math.floor(left / 20) * 20; x <= right; x += 20) { const p = point(x, 0); ctx.beginPath(); ctx.moveTo(p.x, 0); ctx.lineTo(p.x, canvas.height); ctx.stroke() }
-  for (let y = Math.floor(top / 20) * 20; y <= bottom; y += 20) { const p = point(0, y); ctx.beginPath(); ctx.moveTo(0, p.y); ctx.lineTo(canvas.width, p.y); ctx.stroke() }
-  for (const box of battle.terrain) { const p = point(box.x, box.y); ctx.fillStyle = '#536657'; ctx.strokeStyle = '#a4bda3'; ctx.lineWidth = 2; ctx.fillRect(p.x, p.y, box.width * camera.scale, box.height * camera.scale); ctx.strokeRect(p.x, p.y, box.width * camera.scale, box.height * camera.scale); ctx.fillStyle = '#e0e9dc'; ctx.font = '12px sans-serif'; ctx.fillText('地形', p.x + 4, p.y + 14) }
+  for (let x = Math.floor(left / 30) * 30; x <= right; x += 30) { const p = point(x, 0); ctx.beginPath(); ctx.moveTo(p.x, 0); ctx.lineTo(p.x, canvas.height); ctx.stroke() }
+  for (let y = Math.floor(top / 30) * 30; y <= bottom; y += 30) { const p = point(0, y); ctx.beginPath(); ctx.moveTo(0, p.y); ctx.lineTo(canvas.width, p.y); ctx.stroke() }
+  for (const box of battle.terrain) { if (box.x + box.width < left || box.x > right || box.y + box.height < top || box.y > bottom) continue; const p = point(box.x, box.y); ctx.fillStyle = '#243337'; ctx.fillRect(p.x+5,p.y+6,box.width*camera.scale,box.height*camera.scale); ctx.fillStyle = '#596b68'; ctx.strokeStyle = '#a4bda3'; ctx.lineWidth = 2; ctx.fillRect(p.x, p.y, box.width * camera.scale, box.height * camera.scale); ctx.strokeRect(p.x, p.y, box.width * camera.scale, box.height * camera.scale); ctx.fillStyle = '#e0e9dc'; ctx.font = '12px sans-serif'; ctx.fillText('楼宇', p.x + 4, p.y + 14) }
   const previousProjectiles = new Map(previousBattle.projectiles.map(p => [p.id, p]))
   for (const p of battle.projectiles) { const old = previousProjectiles.get(p.id) ?? p; const x = old.x + (p.x - old.x) * alpha, y = old.y + (p.y - old.y) * alpha; const head = point(x, y), tail = point(x - p.vx * .15, y - p.vy * .15); const offset = p.layer === 'air' ? -24 : p.layer === 'submerged' ? 20 : 0; head.y += offset; tail.y += offset; ctx.strokeStyle = p.team === 'blue' ? '#8afbf0' : '#ff9b83'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(head.x, head.y); ctx.lineTo(tail.x, tail.y); ctx.stroke() }
   for (const s of displayShips.filter(s => s.hp > 0)) {
@@ -48,9 +65,9 @@ function drawScene(now: number) {
 function draw(){
 el('status').textContent=`${battle.time.toFixed(1)} 秒 · ${battle.result?({blue:'蓝方获胜',red:'红方获胜',draw:'平局 / 超时'} as const)[battle.result]:'交战中'} · 发射 ${battle.shots} / 接触 ${battle.collisions} / 命中 ${battle.hits} / 未接触 ${battle.dodges}`
 el('play').textContent=running?'暂停':battle.result?'战斗结束':'继续';el<HTMLButtonElement>('play').disabled=Boolean(battle.result);el<HTMLButtonElement>('step').disabled=running||Boolean(battle.result)
-el('ships').innerHTML=battle.ships.map(s=>`<div>${s.team==='blue'?'🔹':'🔸'} ${s.name} · HP ${s.hp.toFixed(1)} / ${s.stats.hp} · 对方情报 ${Math.floor(battle.intel[s.team==='blue'?'red':'blue'][s.id]??0)}</div>`).join('');el('events').innerHTML=[...battle.events].reverse().map(e=>`<p>${e}</p>`).join('')||'<p>等待战斗事件。</p>'}
+el('ships').innerHTML=battle.ships.map(s=>`<div>${s.team==='blue'?'🔹':'🔸'} ${s.name} · HP ${s.hp.toFixed(1)} / ${s.stats.hp} · ${({'search':'搜索','cover':'冷却找掩体','attack':'就绪进攻','evade':'脱离'} as const)[battle.tactics[s.id] ?? 'search']} · 对方情报 ${Math.floor(battle.intel[s.team==='blue'?'red':'blue'][s.id]??0)}</div>`).join('');el('events').innerHTML=[...battle.events].reverse().map(e=>`<p>${e}</p>`).join('')||'<p>等待战斗事件。</p>'}
 function stop(){running=false;if(timer!==undefined)clearInterval(timer);timer=undefined}
 function step(){previousBattle=battle;battle=stepDogfight(battle);lastStepAt=performance.now();if(battle.result)stop();draw()}
 function start(){if(running||battle.result)return;running=true;timer=window.setInterval(step,100/Number(el<HTMLSelectElement>('speed').value))}
-el('reset').onclick=()=>{const seed=Number(el<HTMLInputElement>('seed').value);if(!Number.isSafeInteger(seed)){el('status').textContent='请输入整数种子';return}const fleets=readLineups();if(!fleets){el('status').textContent='双方都至少需要一艘舰船';return}stop();battle=createDogfight(seed,fleets.blue,fleets.red);previousBattle=battle;lastStepAt=performance.now();camera=targetCamera(battle.ships,canvas.width,canvas.height)!;start();draw()}
+el('reset').onclick=()=>{const seed=Number(el<HTMLInputElement>('seed').value);if(!Number.isSafeInteger(seed)){el('status').textContent='请输入整数种子';return}const mapSeed=Number(el<HTMLInputElement>('map-seed').value);if(!Number.isSafeInteger(mapSeed)){el('status').textContent='请输入整数地图种子';return}const fleets=readLineups();if(!fleets){el('status').textContent='双方都至少需要一艘舰船';return}stop();battle=createDogfight(seed,fleets.blue,fleets.red,mapSeed);previousBattle=battle;lastStepAt=performance.now();camera=targetCamera(battle.ships,canvas.width,canvas.height)!;start();draw()}
 el('play').onclick=()=>{if(running)stop();else start();draw()};el('step').onclick=step;el<HTMLSelectElement>('speed').onchange=()=>{if(running){stop();start()}};start();draw();requestAnimationFrame(drawScene)

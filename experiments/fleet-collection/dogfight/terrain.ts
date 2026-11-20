@@ -1,9 +1,5 @@
 import type { Layer } from '../battle/model'
 export interface TerrainBox { id: string; x: number; y: number; width: number; height: number; blocks: Layer[] }
-export const terrain: TerrainBox[] = [
-  { id: 'island-north', x: 48, y: 4, width: 16, height: 18, blocks: ['surface', 'submerged'] },
-  { id: 'island-south', x: 64, y: 78, width: 17, height: 17, blocks: ['surface', 'submerged'] },
-]
 /** Earliest segment entry into a box, expanded by the unit radius. */
 export function boxEntry(a: { x: number; y: number }, b: { x: number; y: number }, box: TerrainBox, radius = 0): number | null {
   let start = 0, end = 1
@@ -16,6 +12,8 @@ export function boxEntry(a: { x: number; y: number }, b: { x: number; y: number 
   return start >= 0 && start <= 1 ? start : null
 }
 export function terrainImpact(a: {x:number;y:number}, b: {x:number;y:number}, layer: Layer, boxes: TerrainBox[], radius = 0): number | null {
-  const hits = boxes.filter(box => box.blocks.includes(layer)).map(box => boxEntry(a,b,box,radius)).filter((t): t is number => t !== null)
+  const minX = Math.min(a.x,b.x)-radius, maxX = Math.max(a.x,b.x)+radius
+  const minY = Math.min(a.y,b.y)-radius, maxY = Math.max(a.y,b.y)+radius
+  const hits = boxes.filter(box => box.blocks.includes(layer) && box.x <= maxX && box.x + box.width >= minX && box.y <= maxY && box.y + box.height >= minY).map(box => boxEntry(a,b,box,radius)).filter((t): t is number => t !== null)
   return hits.length ? Math.min(...hits) : null
 }

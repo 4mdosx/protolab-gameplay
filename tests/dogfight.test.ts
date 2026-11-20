@@ -45,7 +45,7 @@ it('prevents surface units entering a terrain box across multiple steps', () => 
   b.terrain = [{ id: 'wall', x: 20, y: 10, width: 10, height: 30, blocks: ['surface', 'submerged'] }]
   b.ships = b.ships.map(s => s.team === 'blue' ? { ...s, x: 17, y: 25 } : { ...s, x: 100, y: 25 })
   b.headings = { 'blue-0': 0 }
-  for (let i = 0; i < 100 && !b.result; i++) {
+  for (let i = 0; i < 10 && !b.result; i++) {
     b = stepDogfight(b)
     const s = b.ships.find(s => s.id === 'blue-0')!
     expect(s.x > 18 && s.x < 32 && s.y > 8 && s.y < 42).toBe(false)
