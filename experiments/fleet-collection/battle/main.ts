@@ -12,14 +12,14 @@ function draw() {
   ctx.strokeStyle = '#234155'; for (let x = 0; x <= 960; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 600); ctx.stroke() }
   for (const s of battle.ships.filter(s => s.hp > 0)) {
     const x = s.x * 8, y = s.y * 6
-    if (s.team === 'blue') { ctx.beginPath(); ctx.setLineDash([5, 8]); ctx.strokeStyle = '#3b6474'; ctx.ellipse(x, y, s.weapon.range * 8, s.weapon.range * 6, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]) }
+    if (s.team === 'blue') { ctx.beginPath(); ctx.setLineDash([5, 8]); ctx.strokeStyle = '#3b6474'; ctx.ellipse(x, y, s.weaponSlots[0].weapon.range * 8, s.weaponSlots[0].weapon.range * 6, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]) }
     ctx.fillStyle = s.team === 'blue' ? '#69d5d4' : '#f08b83'; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.fillText(s.name, x + 13, y - 5); ctx.fillText(`${Math.ceil(s.hp)}/${s.stats.hp}`, x + 13, y + 11)
   }
   get('status').textContent = `${battle.time} 秒 · ${battle.result ? ({ blue: '蓝方获胜', red: '红方获胜', draw: '平局 / 超时' } as const)[battle.result] : '交战中'}`
   get('play').textContent = running ? '暂停' : battle.result ? '战斗结束' : '继续'
   get<HTMLButtonElement>('play').disabled = Boolean(battle.result)
   get<HTMLButtonElement>('step').disabled = running || Boolean(battle.result)
-  get('ships').innerHTML = battle.ships.map(s => `<div>${s.team === 'blue' ? '🔹' : '🔸'} ${s.name} · HP ${s.hp.toFixed(1)} / ${s.stats.hp} · ${s.personality === 'kite' ? '保持距离' : '接近'} · ${s.weapon.id} · 对方情报 ${Math.floor(battle.intel[s.team === 'blue' ? 'red' : 'blue'][s.id] ?? 0)}</div>`).join('')
+  get('ships').innerHTML = battle.ships.map(s => `<div>${s.team === 'blue' ? '🔹' : '🔸'} ${s.name} · HP ${s.hp.toFixed(1)} / ${s.stats.hp} · ${s.personality === 'kite' ? '保持距离' : '接近'} · ${s.weaponSlots[0].weapon.id} · 对方情报 ${Math.floor(battle.intel[s.team === 'blue' ? 'red' : 'blue'][s.id] ?? 0)}</div>`).join('')
   get('events').innerHTML = [...battle.events].reverse().map(e => `<p>${e}</p>`).join('') || '<p>等待情报和战斗事件。</p>'
 }
 function stop() { running = false; if (timer !== undefined) clearInterval(timer); timer = undefined }

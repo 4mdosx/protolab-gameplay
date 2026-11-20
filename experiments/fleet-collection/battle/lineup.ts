@@ -1,7 +1,9 @@
 import { profiles, type Team } from './model'
 
+const classNames = { destroyer: '驱逐', cruiser: '巡洋', battleship: '战列', carrier: '航母', submarine: '潜航' } as const
+
 export function mountLineups(container: HTMLElement, includeLayers = false) {
-  container.innerHTML = (['blue', 'red'] as Team[]).map(team => `<fieldset><legend>${team === 'blue' ? '蓝方' : '红方'}编队</legend><div class="lineup-slots">${Array.from({ length: 6 }, (_, slot) => `<label>位置 ${slot + 1} <select id="${team}-slot-${slot}"><option value="" ${slot >= 3 ? 'selected' : ''}>空位</option>${profiles.map((p, i) => ({ p, i })).filter(({ p }) => includeLayers || p.layer === 'surface').map(({ p, i }) => `<option value="${i}" ${i === slot ? 'selected' : ''}>${p.name}</option>`).join('')}</select></label>`).join('')}</div></fieldset>`).join('')
+  container.innerHTML = (['blue', 'red'] as Team[]).map(team => `<fieldset><legend>${team === 'blue' ? '蓝方' : '红方'}编队</legend><div class="lineup-slots">${Array.from({ length: 6 }, (_, slot) => `<label>位置 ${slot + 1} <select id="${team}-slot-${slot}"><option value="" ${slot >= 3 ? 'selected' : ''}>空位</option>${profiles.map((p, i) => ({ p, i })).filter(({ p }) => includeLayers || p.layer === 'surface').map(({ p, i }) => `<option value="${i}" ${i === slot ? 'selected' : ''}>${p.name} · ${classNames[p.shipClass]}</option>`).join('')}</select></label>`).join('')}</div></fieldset>`).join('')
 }
 export function readLineups(): { blue: number[]; red: number[] } | null {
   const read = (team: Team) => Array.from({ length: 6 }, (_, i) => (document.getElementById(`${team}-slot-${i}`) as HTMLSelectElement).value).filter(v => v !== '').map(Number)

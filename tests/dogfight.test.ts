@@ -27,10 +27,11 @@ describe('2.5D and terrain', () => {
   it('restricts weapons by target layer', async () => {
     const { canAttack } = await import('../experiments/fleet-collection/dogfight/model')
     const b = createDogfight(1, [1, 0], [3, 4])
+    b.ships[2] = { ...b.ships[2], layer: 'air' } // Stand-in target only; aircraft are not roster characters.
     expect(canAttack(b.ships[0], b.ships[2])).toBe(true)
     expect(canAttack(b.ships[0], b.ships[3])).toBe(false)
-    expect(canAttack(b.ships[1], b.ships[2])).toBe(false)
-    expect(canAttack(b.ships[1], b.ships[3])).toBe(true)
+    expect(canAttack(b.ships[1], b.ships[2], b.ships[1].weaponSlots[1].weapon)).toBe(false)
+    expect(canAttack(b.ships[1], b.ships[3], b.ships[1].weaponSlots[1].weapon)).toBe(true)
   })
   it('blocks surface movement and allows aircraft above terrain', async () => {
     const { terrainImpact } = await import('../experiments/fleet-collection/dogfight/terrain')
