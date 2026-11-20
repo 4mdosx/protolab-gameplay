@@ -1,5 +1,5 @@
 import type { Layer } from '../battle/model'
-export interface TerrainBox { id: string; x: number; y: number; width: number; height: number; blocks: Layer[] }
+export interface TerrainBox { id: string; x: number; y: number; width: number; height: number; blocks: Layer[]; kind?: 'low' | 'tower'; elevation?: number }
 /** Earliest segment entry into a box, expanded by the unit radius. */
 export function boxEntry(a: { x: number; y: number }, b: { x: number; y: number }, box: TerrainBox, radius = 0): number | null {
   let start = 0, end = 1

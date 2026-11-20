@@ -51,3 +51,16 @@ it('prevents surface units entering a terrain box across multiple steps', () => 
     expect(s.x > 18 && s.x < 32 && s.y > 8 && s.y < 42).toBe(false)
   }
 })
+
+it('blocks every class at tall building footprints while allowing low buildings', () => {
+  const tower={id:'tower',x:20,y:15,width:10,height:20,kind:'tower' as const,blocks:['surface','submerged'] as ('surface'|'submerged')[]}
+  for(const profile of [0,1,2,3,4]) {
+    let b=createDogfight(1,[profile],[0],17,true);b.terrain=[tower]
+    b.ships=b.ships.map(s=>s.team==='blue'?{...s,x:17.8,y:25}:{...s,x:90,y:25})
+    b.headings={'blue-0':0};b=stepDogfight(b)
+    expect(b.ships[0].x).toBeLessThanOrEqual(18.001)
+    b=createDogfight(1,[profile],[0],17,true);b.terrain=[{...tower,kind:'low',blocks:[]}]
+    b.ships=b.ships.map(s=>s.team==='blue'?{...s,x:17.8,y:25}:{...s,x:90,y:25});b.headings={'blue-0':0};b=stepDogfight(b)
+    expect(b.ships[0].x).toBeGreaterThan(18)
+  }
+})

@@ -36,7 +36,8 @@ export function generateChunk(seed: number, cx: number, cy: number): CityChunk {
       let clearWater = true
       for (let sy = by - 4; sy <= by + height + 4; sy += 3) for (let sx = bx - 4; sx <= bx + width + 4; sx += 3) if (waterAt(seed, sx, sy)) clearWater = false
       if (!onLand || !clearWater || spawn || corridor || random() < .1) continue
-      buildings.push({ id: `${cx}:${cy}:${row}:${col}:${part}`, x: bx, y: by, width, height, blocks: ['surface', 'submerged'] })
+      const tower = random() < 0.22
+      buildings.push({ id: `${cx}:${cy}:${row}:${col}:${part}`, x: bx, y: by, width, height, kind: tower ? 'tower' : 'low', elevation: tower ? 18 + random() * 12 : 3 + random() * 4, blocks: tower ? ['surface', 'submerged'] : [] })
     }
   }
   return { key: `${cx},${cy}`, x: cx, y: cy, buildings }
