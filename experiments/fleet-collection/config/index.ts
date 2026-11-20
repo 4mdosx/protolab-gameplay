@@ -1,9 +1,9 @@
 import { characters } from './characters'
 import { historicalShips } from './historical-ships'
 import { weapons } from './weapons'
-import { aiModules } from './ai'
+import { resolveStrategy, selectState, strategies } from './ai/index'
 import { aircraftConfigs } from './aircraft'
-export { characters, historicalShips, weapons, aiModules, aircraftConfigs }
+export { characters, historicalShips, weapons, strategies, resolveStrategy, selectState, aircraftConfigs }
 export type * from './types'
 export function resolveCharacter(index: number) {
   const character = characters[index]
@@ -13,8 +13,7 @@ export function resolveCharacter(index: number) {
   const hull = historicalShip.configurations.find(config => config.id === character.configurationId)
   if (!hull) throw new Error(`missing hull configuration for ${character.id}`)
   if (character.shipClass !== hull.shipClass || character.shipClass !== historicalShip.shipClass) throw new Error(`class mismatch for ${character.id}`)
-  const ai = aiModules[character.aiId]
-  if (!ai) throw new Error(`missing AI for ${character.id}`)
+  const ai = resolveStrategy(character.strategy, character.shipClass)
   if (!hull.weaponSlots.length || new Set(hull.weaponSlots.map(slot => slot.slotId)).size !== hull.weaponSlots.length) throw new Error(`invalid weapon slots for ${character.id}`)
   const weaponSlots = hull.weaponSlots.map(slot => {
     const weapon = weapons[slot.weaponId]
@@ -26,14 +25,15 @@ export function resolveCharacter(index: number) {
     if (!weapon.spread.length || weapon.spread.length !== weapon.mounts * weapon.barrelsPerMount || weapon.spread.some(angle => !Number.isFinite(angle))) throw new Error(`invalid projectile spread for ${character.id}`)
     return { slotId: slot.slotId, weaponId: slot.weaponId, weapon: { ...weapon, spread: [...weapon.spread] }, readyAt: 0 }
   })
-  return { ...hull, ...character, stats: { ...hull.stats }, armor: { ...hull.armor }, weaponSlots, equipmentSlot: { ...hull.equipmentSlot }, ai: { ...ai }, preferredRange: ai.preferredRange, personality: (ai.id === 'artillery' ? 'kite' : 'advance') as 'kite' | 'advance' }
+  return { ...hull, ...character, stats: { ...hull.stats }, armor: { ...hull.armor }, weaponSlots, equipmentSlot: { ...hull.equipmentSlot }, ai, preferredRange: ai.preferredRange, personality: ai.personality }
 }
 
 export function resolveAircraft(id: string) {
   const aircraft = aircraftConfigs[id]
   if (!aircraft) throw new Error(`unknown aircraft configuration: ${id}`)
-  const weapon = weapons[aircraft.weaponId], ai = aiModules[aircraft.aiId]
-  if (!weapon || weapon.delivery === 'aircraft' || !ai) throw new Error(`invalid aircraft weapon or AI: ${id}`)
+  const weapon = weapons[aircraft.weaponId]
+  if (!weapon || weapon.delivery === 'aircraft') throw new Error(`invalid aircraft weapon or AI: ${id}`)
+  const ai = resolveStrategy(aircraft.strategy, 'aircraft')
   if (!weapon.spread.length || weapon.spread.length !== weapon.mounts * weapon.barrelsPerMount || weapon.spread.some(angle => !Number.isFinite(angle)) || !(aircraft.lifetime > 0)) throw new Error(`invalid aircraft configuration: ${id}`)
   return { ...aircraft, stats: { ...aircraft.stats }, armor: { ...aircraft.armor }, ai: { ...ai }, weapon: { ...weapon, spread: [...weapon.spread] } }
 }

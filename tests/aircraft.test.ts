@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createDogfight, stepDogfight } from '../experiments/fleet-collection/dogfight/model'
-import { aircraftConfigs, weapons, aiModules } from '../experiments/fleet-collection/config'
+import { aircraftConfigs, weapons, resolveCharacter, resolveAircraft } from '../experiments/fleet-collection/config'
 function setup() {
   const b=createDogfight(42,[3],[0],17,true)
   b.ships=b.ships.map(s=>({...s,x:s.team==='blue'?20:70,y:50}))
@@ -11,7 +11,7 @@ describe('carrier aircraft',()=>{
   it('launches linked aircraft with independent AI and gun configuration',()=>{
     let b=stepDogfight(setup());expect(b.aircraft).toHaveLength(1)
     const plane=b.aircraft[0],config=aircraftConfigs[weapons.carrierAirGroup.summonId!]
-    expect(plane.ownerId).toBe('blue-0');expect(plane.layer).toBe('air');expect(plane.ai.id).toBe(config.aiId);expect(plane.weaponSlots[0].weaponId).toBe(config.weaponId);expect(plane.ai.id).not.toBe(b.ships[0].ai.id)
+    expect(plane.ownerId).toBe('blue-0');expect(plane.layer).toBe('air');expect(plane.ai.strategyId).toBe(config.strategy.strategyId);expect(plane.weaponSlots[0].weaponId).toBe(config.weaponId);expect(plane.ai.id).not.toBe(b.ships[0].ai.id)
     expect(b.ships[0].weaponSlots[0].readyAt).toBe(weapons.carrierAirGroup.cooldown)
     for(let i=0;i<200&&!b.result;i++)b=stepDogfight(b)
     expect(b.events.some(event=>event.includes('舰载机')&&event.includes('机炮')) || b.projectiles.some(p=>p.source.startsWith('air-'))).toBe(true)
@@ -25,7 +25,7 @@ describe('carrier aircraft',()=>{
   it('aircraft expire and do not decide victory without their carrier',()=>{
     let b=stepDogfight(setup());b.aircraft[0].expiresAt=b.time;b=stepDogfight(b);expect(b.aircraft).toHaveLength(0)
   })
-  it('carrier and fighter have separately configured tactics',()=>{expect(aiModules.aviation.preferredRange).toBeGreaterThan(aiModules.fighter.preferredRange)})
+  it('carrier and fighter have separately configured tactics',()=>{expect(resolveCharacter(3).ai.preferredRange).toBeGreaterThan(resolveAircraft(weapons.carrierAirGroup.summonId!).ai.preferredRange);expect(resolveCharacter(3).ai.root).not.toBe(resolveAircraft(weapons.carrierAirGroup.summonId!).ai.root)})
   it('steers toward enemy ships while guns still engage a nearer aircraft',()=>{
     let b=setup()
     b.ships=b.ships.map(s=>({...s,x:s.team==='blue'?0:90,y:40}))

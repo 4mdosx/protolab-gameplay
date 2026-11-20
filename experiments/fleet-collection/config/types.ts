@@ -29,15 +29,49 @@ export interface Weapon {
   summonId?: string
   maxActive?: number
 }
-export interface AiModule {
-  id: string
-  name: string
-  useCover: boolean
+export type AiTactic = 'search' | 'approach' | 'attack' | 'cover' | 'evade'
+/** Conditions read the resolved variant, so one tree yields different transitions after parameters are applied. */
+export type AiCondition = 'noTarget' | 'hasTarget' | 'tooClose' | 'inBand' | 'outOfBand' | 'cooling' | 'ready' | 'blocked' | 'open' | 'incoming' | 'cover'
+export interface StateBranch { when: AiCondition[]; to: string }
+export interface StateNode { id: string; tactic: AiTactic; branches: StateBranch[] }
+export interface StrategyBase {
   preferredRange: number
   orbitStrength: number
   dodgeStrength: number
   turnRate: number
   turnAcceleration: number
+  useCover: boolean
+  /** Fraction of preferred range inside which the ship is too close. */
+  disengageRatio: number
+  /** Fraction of preferred range inside which the ship can hold and fight. */
+  engageRatio: number
+}
+/** A ship-class tactic. The tree is fixed; aggressiveness and initiative scale it per character. */
+export interface Strategy {
+  id: string
+  name: string
+  shipClass: ShipClass | 'aircraft'
+  root: string
+  states: StateNode[]
+  base: StrategyBase
+}
+export interface StrategyMount {
+  strategyId: string
+  /** 0 keeps distance, 1 seeks a closer fight. */
+  aggressiveness: number
+  /** 0 waits, 1 starts acting from farther away and dodges harder. */
+  initiative: number
+}
+/** Resolved copy hung on a ship. Parameters have already been applied. */
+export interface AiModule extends StrategyBase {
+  id: string
+  name: string
+  strategyId: string
+  aggressiveness: number
+  initiative: number
+  personality: Personality
+  root: string
+  states: StateNode[]
 }
 /** Identity and its historically meaningful equipment configurations. */
 export interface HullConfiguration {
@@ -68,7 +102,7 @@ export interface CharacterConfig {
   historicalShipId: string
   configurationId: string
   sourceId: string
-  aiId: string
+  strategy: StrategyMount
 }
 
 /** Summoned combat units are not collectible characters or historical ships. */
@@ -78,7 +112,7 @@ export interface AircraftConfig {
   stats: Stats
   speed: number
   armor: Record<DamageType, number>
-  aiId: string
+  strategy: StrategyMount
   weaponId: string
   lifetime: number
 }
