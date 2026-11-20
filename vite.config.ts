@@ -6,7 +6,9 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(import.meta.dirname, 'index.html'),
+        idleLoop: resolve(import.meta.dirname, 'experiments/idle-loop/index.html'),
         fleetBattle: resolve(import.meta.dirname, 'experiments/fleet-collection/battle/index.html'),
+        dogfight: resolve(import.meta.dirname, 'experiments/fleet-collection/dogfight/index.html'),
       },
     },
   },

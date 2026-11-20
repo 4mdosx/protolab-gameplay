@@ -1,1 +1,36 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Gameplay Lab</title></head><body><div id="app"></div><script type="module" src="/experiments/idle-loop/main.ts"></script></body></html>
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gameplay Lab</title>
+    <link rel="stylesheet" href="/home.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">GAMEPLAY LAB</p>
+        <h1>玩法实验室</h1>
+        <p class="intro">选择一个实验，观察玩法与数值如何变化。</p>
+      </header>
+      <section aria-labelledby="experiments-title">
+        <div class="section-heading"><h2 id="experiments-title">实验</h2><span>02</span></div>
+        <div class="experiments">
+          <a class="card" href="/experiments/fleet-collection/dogfight/">
+            <span class="number">01 / FLEET COLLECTION</span>
+            <h3>舰队机动战斗 <span aria-hidden="true">↗</span></h3>
+            <p>使用相同属性，观察高速穿插、弹道与机动回避。</p>
+            <span class="tag">战斗对照</span>
+          </a>
+          <a class="card" href="/experiments/idle-loop/">
+            <span class="number">02 / IDLE LOOP</span>
+            <h3>Idle 经济循环 <span aria-hidden="true">↗</span></h3>
+            <p>调整收入与升级费用，通过批量模拟观察成长节奏。</p>
+            <span class="tag">数值实验</span>
+          </a>
+        </div>
+      </section>
+      <footer>原型用于验证想法，参数和规则仍在调整中。</footer>
+    </main>
+  </body>
+</html>

@@ -3,21 +3,31 @@ import { createRandom } from '../../../packages/simulation'
 export type Team = 'blue' | 'red'
 export type Personality = 'advance' | 'kite'
 export type DamageType = 'kinetic' | 'underwater'
+export type Layer = 'surface' | 'air' | 'submerged'
+export type ShipClass = 'destroyer' | 'cruiser' | 'battleship' | 'aircraft' | 'submarine'
 export interface Stats { hp: number; pwr: number; def: number; acc: number; eva: number; sen: number; stl: number }
 export interface Weapon { id: string; delivery: 'ballistic' | 'torpedo'; damage: DamageType; range: number; cooldown: number; power: number; accuracy: number }
-export interface Ship { id: string; name: string; team: Team; x: number; y: number; speed: number; preferredRange: number; personality: Personality; stats: Stats; hp: number; armor: Record<DamageType, number>; weapon: Weapon; readyAt: number }
+export interface Ship { shipClass: ShipClass; layer: Layer; id: string; name: string; team: Team; x: number; y: number; speed: number; preferredRange: number; personality: Personality; stats: Stats; hp: number; armor: Record<DamageType, number>; weapon: Weapon; readyAt: number }
 export interface Battle { seed: number; tick: number; time: number; ships: Ship[]; intel: Record<Team, Record<string, number>>; events: string[]; result: Team | 'draw' | null; random: () => number }
 export const STEP = 1
 const gun: Weapon = { id: '主炮', delivery: 'ballistic', damage: 'kinetic', range: 52, cooldown: 4, power: 0.46, accuracy: 0.85 }
 const torpedo: Weapon = { id: '鱼雷', delivery: 'torpedo', damage: 'underwater', range: 30, cooldown: 7, power: 0.75, accuracy: 0.7 }
 export const profiles = [
-  { name: '侦察驱逐', speed: 5, preferredRange: 24, personality: 'advance' as const, stats: { hp: 72, pwr: 28, def: 22, acc: 45, eva: 62, sen: 85, stl: 55 }, armor: { kinetic: 0.8, underwater: 1.2 }, weapon: torpedo },
-  { name: '护卫巡洋', speed: 3, preferredRange: 35, personality: 'advance' as const, stats: { hp: 105, pwr: 42, def: 48, acc: 55, eva: 38, sen: 58, stl: 30 }, armor: { kinetic: 1, underwater: 1 }, weapon: gun },
-  { name: '炮击战列', speed: 2, preferredRange: 44, personality: 'kite' as const, stats: { hp: 155, pwr: 65, def: 75, acc: 60, eva: 20, sen: 38, stl: 20 }, armor: { kinetic: 1.4, underwater: 0.7 }, weapon: gun },
+  { shipClass: 'destroyer' as const, layer: 'surface' as const, name: '侦察驱逐', speed: 5, preferredRange: 24, personality: 'advance' as const, stats: { hp: 72, pwr: 28, def: 22, acc: 45, eva: 62, sen: 85, stl: 55 }, armor: { kinetic: 0.8, underwater: 1.2 }, weapon: torpedo },
+  { shipClass: 'cruiser' as const, layer: 'surface' as const, name: '护卫巡洋', speed: 3, preferredRange: 35, personality: 'advance' as const, stats: { hp: 105, pwr: 42, def: 48, acc: 55, eva: 38, sen: 58, stl: 30 }, armor: { kinetic: 1, underwater: 1 }, weapon: gun },
+  { shipClass: 'battleship' as const, layer: 'surface' as const, name: '炮击战列', speed: 2, preferredRange: 44, personality: 'kite' as const, stats: { hp: 155, pwr: 65, def: 75, acc: 60, eva: 20, sen: 38, stl: 20 }, armor: { kinetic: 1.4, underwater: 0.7 }, weapon: gun },
+  { shipClass: 'aircraft' as const, layer: 'air' as const, name: '航空单位', speed: 5, preferredRange: 30, personality: 'advance' as const, stats: { hp: 60, pwr: 32, def: 18, acc: 50, eva: 65, sen: 70, stl: 35 }, armor: { kinetic: 0.8, underwater: 1.2 }, weapon: gun },
+  { shipClass: 'submarine' as const, layer: 'submerged' as const, name: '潜航单位', speed: 3, preferredRange: 24, personality: 'advance' as const, stats: { hp: 80, pwr: 35, def: 30, acc: 45, eva: 40, sen: 40, stl: 80 }, armor: { kinetic: 0.8, underwater: 1.2 }, weapon: torpedo },
 ]
-export function createBattle(seed: number, lineup: number[] = [0, 1, 2]): Battle {
-  if (lineup.length !== 3 || lineup.some(i => !Number.isInteger(i) || !profiles[i])) throw new Error('lineup must contain three valid profiles')
-  const ships: Ship[] = (['blue', 'red'] as Team[]).flatMap(team => (team === 'blue' ? lineup : [0, 1, 2]).map((index, i) => { const p = profiles[index]; return { ...p, id: `${team}-${i}`, team, x: team === 'blue' ? 15 : 105, y: 25 + i * 25, hp: p.stats.hp, readyAt: 0 } }))
+export function createBattle(seed: number, blue: number[] = [0, 1, 2], red: number[] = [0, 1, 2]): Battle {
+  for (const lineup of [blue, red]) {
+    if (lineup.length < 1 || lineup.length > 6 || lineup.some(i => !Number.isInteger(i) || !profiles[i])) throw new Error('each fleet must contain 1 to 6 valid profiles')
+  }
+  const ships: Ship[] = (['blue', 'red'] as Team[]).flatMap(team => (team === 'blue' ? blue : red).map((index, i) => {
+    const p = profiles[index]
+    const column = Math.floor(i / 3), row = i % 3
+    return { ...p, id: `${team}-${i}`, team, x: team === 'blue' ? 15 + column * 10 : 105 - column * 10, y: 25 + row * 25, hp: p.stats.hp, readyAt: 0 }
+  }))
   return { seed, tick: 0, time: 0, ships, intel: { blue: {}, red: {} }, events: [], result: null, random: createRandom(seed) }
 }
 const distance = (a: Ship, b: Ship) => Math.hypot(a.x - b.x, a.y - b.y)
