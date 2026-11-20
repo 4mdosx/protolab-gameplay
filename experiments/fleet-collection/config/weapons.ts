@@ -20,6 +20,9 @@ export const weapons: Record<string, Weapon> = {
     accuracy: 0.85,
     projectileSpeed: 45,
     spread: salvo(2, 0.045),
+    arc: 0.9,
+    traverse: 2.4,
+    recoil: 3,
   },
   cruiserGun: {
     id: '巡洋主炮',

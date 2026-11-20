@@ -6,6 +6,7 @@ import { findPath } from '../pathfinding'
 import { chooseCover, chooseFiringPosition } from '../cover'
 import { canAttack } from '../combat'
 import { selectState } from '../../config'
+import { setMovementCommand, steerDestroyer, type Maneuver, type MovementCommand } from './steering'
 
 const RADIUS = 2
 const CLEARANCE = 4
@@ -70,17 +71,23 @@ export function setIntentHeading(store: IntentStore, id: string, heading: number
 
 export interface IntentDecision {
   intents: IntentStore
+  commands: Record<string, MovementCommand>
   navigation: Dogfight['navigation']
   cover: Dogfight['cover']
   tactics: Dogfight['tactics']
   orbits: Dogfight['orbits']
   targets: Record<string, string>
   bypass: Record<string, number>
+  maneuvers: Record<string, Maneuver>
+  maneuverUntil: Record<string, number>
 }
 
 /** Walk each strategy tree, then publish one intent heading per unit. */
 export function decideIntents(b: Dogfight, alive: Ship[], intel: Battle['intel'], obstacles: TerrainBox[], events: string[]): IntentDecision {
   const intents: IntentStore = { headings: {} }
+  const commands: Record<string, MovementCommand> = {}
+  const maneuvers = { ...(b.maneuvers ?? {}) }
+  const maneuverUntil = { ...(b.maneuverUntil ?? {}) }
   const navigation = { ...b.navigation }
   const cover = { ...b.cover }
   const tactics = { ...b.tactics }
@@ -168,7 +175,16 @@ export function decideIntents(b: Dogfight, alive: Ship[], intel: Battle['intel']
     const around = orbits[ship.id]?.kind === 'building' ? { heading: Math.atan2(vy, vx), sign: null as number | null } : steerAround(ship, Math.atan2(vy, vx), aim, obstacles, side, bypass[ship.id])
     if (around.sign) bypass[ship.id] = around.sign
     else delete bypass[ship.id]
-    setIntentHeading(intents, ship.id, around.heading)
+    if (ship.shipClass === 'destroyer' && !ship.unitKind) {
+      const cruise = ship.speed * 3
+      const inRange = !!target && d <= ship.weaponSlots[0].weapon.range
+      const held = (maneuverUntil[ship.id] ?? 0) > b.time && tactic === 'attack'
+      const command = steerDestroyer({ cruise, tactic, aggression: ship.ai.aggressiveness, preferred: ship.ai.preferredRange, distance: d, ux, uy, travelHeading: around.heading, blocked: blockedView, inRange, buildingOrbit: orbits[ship.id]?.kind === 'building', side, previous: maneuvers[ship.id], held })
+      if (maneuvers[ship.id] !== command.maneuver || (maneuverUntil[ship.id] ?? 0) <= b.time) maneuverUntil[ship.id] = b.time + 0.8
+      maneuvers[ship.id] = command.maneuver
+      setMovementCommand(commands, ship.id, command)
+      setIntentHeading(intents, ship.id, command.desiredFacing)
+    } else setIntentHeading(intents, ship.id, around.heading)
   }
-  return { intents, navigation, cover, tactics, orbits, targets, bypass }
+  return { intents, commands, navigation, cover, tactics, orbits, targets, bypass, maneuvers, maneuverUntil }
 }

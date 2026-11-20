@@ -6,15 +6,31 @@ import { hitTime, canAttack } from './combat'
 const DT=0.1
 const clamp=(x:number,lo:number,hi:number)=>Math.max(lo,Math.min(hi,x))
 const distance=(a:Ship,b:Ship)=>Math.hypot(a.x-b.x,a.y-b.y)
-export function resolveProjectiles(b:Dogfight, alive:Ship[], moved:Map<string,Ship>, intel:Battle['intel'], obstacles:TerrainBox[], events:string[]) {
+export function resolveProjectiles(b:Dogfight, alive:Ship[], moved:Map<string,Ship>, intel:Battle['intel'], obstacles:TerrainBox[], events:string[], aimState: { headings: Record<string, number>; turrets: Record<string, number> } = { headings: {}, turrets: {} }) {
   let nextProjectile=b.nextProjectile, shots=b.shots, collisions=b.collisions, hits=b.hits, dodges=b.dodges
   const spawned: Projectile[]=[]
+  const turrets = { ...aimState.turrets }
+  const recoil: Record<string, { x: number; y: number }> = {}
   for(const ship of [...alive].sort((a,c)=>a.id.localeCompare(c.id))) {
     for (const mount of ship.weaponSlots) {
       const weapon = mount.weapon
       const target=alive.filter(t=>t.team!==ship.team&&canAttack(ship,t,weapon)&&(intel[ship.team][t.id]??0)>=40).sort((a,c)=>distance(ship,a)-distance(ship,c)||a.id.localeCompare(c.id))[0]
       if(!target||distance(ship,target)>weapon.range||b.time+1e-9<mount.readyAt||terrainImpact(ship,target,'surface',obstacles)!==null) continue
-      const angle=Math.atan2(target.y-ship.y,target.x-ship.x), speed=weapon.projectileSpeed
+      let angle=Math.atan2(target.y-ship.y,target.x-ship.x)
+      if (weapon.arc && weapon.traverse) {
+        const heading = aimState.headings[ship.id] ?? angle
+        const key = `${ship.id}:${mount.slotId}`
+        const local = Math.atan2(Math.sin(angle - heading), Math.cos(angle - heading))
+        const wanted = clamp(local, -weapon.arc, weapon.arc)
+        const turret = turrets[key] ?? 0
+        const nextTurret = turret + clamp(wanted - turret, -weapon.traverse * DT, weapon.traverse * DT)
+        turrets[key] = nextTurret
+        const gap = Math.abs(Math.atan2(Math.sin(local - nextTurret), Math.cos(local - nextTurret)))
+        if (gap > 0.15 || Math.abs(local) > weapon.arc + 1e-3) continue
+        angle = heading + nextTurret
+        if (weapon.recoil) { const kick = recoil[ship.id] ?? { x: 0, y: 0 }; recoil[ship.id] = { x: kick.x - Math.cos(angle) * weapon.recoil, y: kick.y - Math.sin(angle) * weapon.recoil } }
+      }
+      const speed=weapon.projectileSpeed
       for (const offset of weapon.spread) spawned.push({id:nextProjectile++,team:ship.team,source:ship.id,target:target.id,x:ship.x,y:ship.y,vx:Math.cos(angle+offset)*speed,vy:Math.sin(angle+offset)*speed,remaining:weapon.range,power:ship.stats.pwr*weapon.power/weapon.spread.length,damage:weapon.damage,accuracy:weapon.accuracy,acc:ship.stats.acc,layer:target.layer,lock:intel[ship.team][target.id]>=100?1:0.6})
       const next = moved.get(ship.id)!
       next.weaponSlots = next.weaponSlots.map(slot => slot.slotId === mount.slotId ? { ...slot, readyAt: b.time + weapon.cooldown } : slot)
@@ -38,5 +54,5 @@ export function resolveProjectiles(b:Dogfight, alive:Ship[], moved:Map<string,Sh
     } else if(remaining<=0){dodges++;events.push('弹道未命中目标')}
     else projectiles.push({...p,...q,remaining})
   }
-  return {nextProjectile, shots, collisions, hits, dodges, projectiles, damage}
+  return {nextProjectile, shots, collisions, hits, dodges, projectiles, damage, turrets, recoil}
 }

@@ -48,6 +48,7 @@ let focusId: string | null = null
 let screenPicks: { id: string; x: number; y: number }[] = []
 let lastFrame = performance.now()
 function drawScene(now: number) {
+  try {
   // Render between fixed simulation snapshots; rendering never changes combat results.
   const interval = 100 / Number(el<HTMLSelectElement>('speed').value)
   const alpha = running ? Math.max(0, Math.min(1, (now - lastStepAt) / interval)) : 1
@@ -101,7 +102,14 @@ function drawScene(now: number) {
     const orbit=battle.orbits[s.id]
     if(orbit){const o=flightPoint(point(orbit.x,orbit.y),camera.scale);ctx.strokeStyle=s.team==='blue'?'#69d5d480':'#f08b8380';ctx.setLineDash([3,6]);ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(o.x,o.y);ctx.stroke();ctx.setLineDash([])}
     const heading=battle.headings[s.id]
-    if(heading!==undefined){ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x-Math.cos(heading)*17,y-Math.sin(heading)*13);ctx.lineTo(x-Math.cos(heading)*9,y-Math.sin(heading)*7);ctx.stroke()}
+    if(s.shipClass==='destroyer' && !s.unitKind && heading!==undefined){
+      const arc = s.weaponSlots[0]?.weapon.arc
+      if(arc){ctx.strokeStyle=s.team==='blue'?'#69d5d455':'#f08b8355';ctx.lineWidth=1;ctx.beginPath();const nose=flightPoint(point(s.x,s.y),camera.scale);ctx.moveTo(nose.x,nose.y);for(let a=heading-arc;a<=heading+arc+0.001;a+=0.18){const p=flightPoint(point(s.x+Math.cos(a)*28,s.y+Math.sin(a)*28),camera.scale);ctx.lineTo(p.x,p.y)}ctx.stroke()}
+      const face=battle.intentHeadings[s.id]
+      if(face!==undefined){const tip=flightPoint(point(s.x+Math.cos(face)*26,s.y+Math.sin(face)*26),camera.scale);ctx.strokeStyle='#e6bd69';ctx.setLineDash([2,3]);ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(tip.x,tip.y);ctx.stroke();ctx.setLineDash([])}
+      const velocity=battle.velocities[s.id]
+      if(velocity){const tip=flightPoint(point(s.x+velocity.x*0.7,s.y+velocity.y*0.7),camera.scale);ctx.strokeStyle='#f4fff8';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(tip.x,tip.y);ctx.stroke()}
+    } else if(heading!==undefined){ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x-Math.cos(heading)*17,y-Math.sin(heading)*13);ctx.lineTo(x-Math.cos(heading)*9,y-Math.sin(heading)*7);ctx.stroke()}
     ctx.fillStyle = s.team === 'blue' ? '#69d5d455' : '#f08b8355'; ctx.beginPath(); ctx.ellipse(base.x,base.y,5,2.5,0,0,Math.PI*2); ctx.fill(); ctx.strokeStyle=color;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(base.x,base.y);ctx.lineTo(x,y);ctx.stroke();ctx.setLineDash([])
     ctx.fillStyle=color;ctx.strokeStyle=color;ctx.lineWidth=2;paintHull(s, x, y, 'fill')
     ctx.fillStyle='#fff';ctx.font='12px sans-serif';ctx.fillText(`${s.name} · ${s.layer==='air'?'空中':s.layer==='submerged'?'水下':'海面'}`,x+13,y-5);ctx.fillText(`${Math.ceil(s.hp)}/${s.stats.hp}`,x+13,y+11)
@@ -112,7 +120,7 @@ function drawScene(now: number) {
   const paintHull = (s: typeof displayShips[number], x: number, y: number, mode: 'fill' | 'stroke') => {
     ctx.beginPath()
     if(s.unitKind==='aircraft'){ctx.moveTo(x,y-8);ctx.lineTo(x+7,y+7);ctx.lineTo(x,y+4);ctx.lineTo(x-7,y+7);ctx.closePath()}
-    else if(s.shipClass==='destroyer'){ctx.moveTo(x,y-10);ctx.lineTo(x+8,y+8);ctx.lineTo(x-8,y+8);ctx.closePath()}
+    else if(s.shipClass==='destroyer'){const h=battle.headings[s.id]??-Math.PI/2,fx=Math.cos(h),fy=Math.sin(h)*0.78,fl=Math.hypot(fx,fy)||1,px=fx/fl,py=fy/fl,rx=-py,ry=px;ctx.moveTo(x+px*12,y+py*12);ctx.lineTo(x-px*8+rx*7,y-py*8+ry*7);ctx.lineTo(x-px*8-rx*7,y-py*8-ry*7);ctx.closePath()}
     else if(s.shipClass==='cruiser'){ctx.moveTo(x,y-10);ctx.lineTo(x+9,y);ctx.lineTo(x,y+10);ctx.lineTo(x-9,y);ctx.closePath()}
     else if(s.shipClass==='battleship'){ctx.rect(x-8,y-8,16,16)}
     else if(s.shipClass==='carrier'){ctx.moveTo(x,y-11);ctx.lineTo(x+3,y-2);ctx.lineTo(x+10,y+3);ctx.lineTo(x+3,y+3);ctx.lineTo(x+2,y+9);ctx.lineTo(x-2,y+9);ctx.lineTo(x-3,y+3);ctx.lineTo(x-10,y+3);ctx.lineTo(x-3,y-2);ctx.closePath()}
@@ -150,7 +158,7 @@ function drawScene(now: number) {
     ctx.fillStyle=color;ctx.font='12px sans-serif';ctx.fillText(mark.ship.name,mark.x+13,mark.y-5)
   }
 
-  requestAnimationFrame(drawScene)
+  } finally { requestAnimationFrame(drawScene) }
 }
 function draw(){
 if (focusId && ![...battle.ships, ...battle.aircraft].some(s => s.id === focusId && s.hp > 0)) focusId = null
@@ -158,7 +166,7 @@ const focusSubject = focusId ? [...battle.ships, ...battle.aircraft].find(s => s
 const focusEngaged = focusSubject ? [...battle.ships, ...battle.aircraft].find(s => s.id === battle.targets[focusSubject.id] && s.hp > 0) : undefined
 el('status').textContent=`${battle.time.toFixed(1)} 秒 · ${battle.result?({blue:'蓝方获胜',red:'红方获胜',draw:'平局 / 超时'} as const)[battle.result]:'交战中'} · 发射 ${battle.shots} / 接触 ${battle.collisions} / 命中 ${battle.hits} / 未接触 ${battle.dodges} · 舰载机 ${battle.aircraft.length}${focusSubject ? ` · 聚焦 ${focusSubject.name}${focusEngaged ? ` → ${focusEngaged.name}` : ' · 搜索中'}` : ''}`
 el('play').textContent=running?'暂停':battle.result?'战斗结束':'继续';el<HTMLButtonElement>('play').disabled=Boolean(battle.result);el<HTMLButtonElement>('step').disabled=running||Boolean(battle.result)
-el('ships').innerHTML=battle.ships.map(s=>`<div data-id="${s.id}" role="button" aria-pressed="${s.id===focusId}">${s.team==='blue'?'🔹':'🔸'} ${s.name} · HP ${s.hp.toFixed(1)} / ${s.stats.hp} · ${s.weaponSlots.map(slot => `${slot.weapon.model} ${slot.weapon.mounts}×${slot.weapon.barrelsPerMount}`).join(' / ')} · ${({'search':'搜索','approach':'接敌','cover':'冷却找掩体','attack':'就绪进攻','evade':'脱离'} as const)[battle.tactics[s.id] ?? 'search']} · 对方情报 ${Math.floor(battle.intel[s.team==='blue'?'red':'blue'][s.id]??0)}</div>`).join('');el('events').innerHTML=[...battle.events].reverse().map(e=>`<p>${e}</p>`).join('')||'<p>等待战斗事件。</p>'}
+el('ships').innerHTML=battle.ships.map(s=>`<div data-id="${s.id}" role="button" aria-pressed="${s.id===focusId}">${s.team==='blue'?'🔹':'🔸'} ${s.name} · HP ${s.hp.toFixed(1)} / ${s.stats.hp} · ${s.weaponSlots.map(slot => `${slot.weapon.model} ${slot.weapon.mounts}×${slot.weapon.barrelsPerMount}`).join(' / ')} · ${({'search':'搜索','approach':'接敌','cover':'冷却找掩体','attack':'就绪进攻','evade':'脱离'} as const)[battle.tactics[s.id] ?? 'search']}${battle.maneuvers[s.id]?`/${({'seek':'航向','approach':'接近','hold':'稳住','orbit_left':'左环绕','orbit_right':'右环绕','evade':'脱离'} as const)[battle.maneuvers[s.id]]}`:''} · 对方情报 ${Math.floor(battle.intel[s.team==='blue'?'red':'blue'][s.id]??0)}</div>`).join('');el('events').innerHTML=[...battle.events].reverse().map(e=>`<p>${e}</p>`).join('')||'<p>等待战斗事件。</p>'}
 function stop(){running=false;if(timer!==undefined)clearInterval(timer);timer=undefined}
 function step(){previousBattle=battle;battle=stepDogfight(battle);lastStepAt=performance.now();if(battle.result)stop();draw()}
 function start(){if(running||battle.result)return;running=true;timer=window.setInterval(step,100/Number(el<HTMLSelectElement>('speed').value))}

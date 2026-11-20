@@ -109,3 +109,58 @@ export function moveSystem(body: MoveBody, world: MoveWorld): MoveStep {
   } else stuckSince = undefined
   return { x: next.x, y: next.y, heading, turnRate, speed: body.speed, stuckSince, pushed }
 }
+
+/** Destroyer pilot: velocity tracks the command, hull facing tracks separately, then position follows velocity. */
+export interface HullBody {
+  x: number
+  y: number
+  heading: number
+  velocity: { x: number; y: number }
+  desiredVelocity: { x: number; y: number }
+  desiredFacing: number
+  thrustAccel: number
+  maxSpeed: number
+  acceleration: number
+  turnRate: number
+  maxTurnRate: number
+  stuckSince?: number
+}
+
+export interface HullStep extends MoveStep {
+  velocity: { x: number; y: number }
+}
+
+export function moveHull(body: HullBody, world: MoveWorld): HullStep {
+  const dt = world.dt ?? DT
+  const errorX = body.desiredVelocity.x - body.velocity.x
+  const errorY = body.desiredVelocity.y - body.velocity.y
+  const errorLen = Math.hypot(errorX, errorY)
+  const scale = errorLen < 1e-6 ? 0 : Math.min(1, body.thrustAccel * dt / errorLen)
+  const velocity = { x: body.velocity.x + errorX * scale, y: body.velocity.y + errorY * scale }
+  const delta = Math.atan2(Math.sin(body.desiredFacing - body.heading), Math.cos(body.desiredFacing - body.heading))
+  const desiredRate = clamp(delta * 2, -body.maxTurnRate, body.maxTurnRate)
+  const turnRate = body.turnRate + clamp(desiredRate - body.turnRate, -body.acceleration * dt, body.acceleration * dt)
+  const heading = body.heading + turnRate * dt
+  const aim = { x: body.x + body.desiredVelocity.x, y: body.y + body.desiredVelocity.y }
+  let next = { x: body.x + velocity.x * dt, y: body.y + velocity.y * dt }
+  const side = world.side ?? (Math.abs(delta) > 1e-6 ? Math.sign(delta) : 1)
+  let resolved = velocity
+  if (terrainImpact(body, next, 'surface', world.obstacles, RADIUS) !== null) {
+    const travel = Math.max(Math.hypot(velocity.x, velocity.y) * dt, 1e-4)
+    const moveHeading = Math.atan2(velocity.y, velocity.x)
+    next = slideTo(body, moveHeading, travel, aim, world.obstacles, side)
+    resolved = { x: (next.x - body.x) / dt, y: (next.y - body.y) / dt }
+  }
+  const progress = distance(body, next)
+  let stuckSince = body.stuckSince
+  let pushed = false
+  if (body.maxSpeed > 0 && progress < 0.25 && touching(body, world.obstacles, 2.5)) {
+    const since = stuckSince ?? world.time
+    if (world.time - since >= STUCK_SECONDS) {
+      const freed = pushAway(body, world.obstacles)
+      if (freed) { next = freed; pushed = true; resolved = { x: 0, y: 0 } }
+      stuckSince = undefined
+    } else stuckSince = since
+  } else stuckSince = undefined
+  return { x: next.x, y: next.y, heading, turnRate, speed: Math.hypot(resolved.x, resolved.y), velocity: resolved, stuckSince, pushed }
+}

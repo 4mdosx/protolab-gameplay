@@ -26,6 +26,12 @@ export interface Weapon {
   accuracy: number
   projectileSpeed: number
   spread: number[]
+  /** Half-angle of the firing arc around the hull nose, radians. Absent means the weapon ignores facing. */
+  arc?: number
+  /** Turret traverse, radians per second. */
+  traverse?: number
+  /** Velocity kick opposite the shot, world units per second, applied once per salvo. */
+  recoil?: number
   summonId?: string
   maxActive?: number
 }
