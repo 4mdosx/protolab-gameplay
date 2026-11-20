@@ -1,0 +1,10 @@
+# Fleet Collection
+
+舰娘收集游戏的项目空间，集中保存共用设计资料与独立实验。
+
+- [单场战斗实验](battle/README.md)：二维自动战斗模拟及运行说明。
+- [游戏设计索引和对账](../../ref/fleet-collection/docs/design-notes.md)：旧设计、概念草案之间的关系和待确认问题。
+- [早期概念草案](../../ref/fleet-collection/GDD.md)：此前对话整理。
+- `../../ref/fleet-collection/old/`：旧项目原始资料、数据和参考内容。
+
+仓库根目录的 `ref/` 为本地参考资料，不纳入 Git。
