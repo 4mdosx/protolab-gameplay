@@ -1,5 +1,6 @@
 import type { Camera } from '../../dogfight/camera'
-import type { Pose } from '../components'
+import { drawHumanoid } from './humanoid'
+import type { Pose, Vec } from '../components'
 import { flightPoint } from '../../dogfight/projection'
 import { worldToScreen } from './view'
 
@@ -8,9 +9,9 @@ function wrap(angle: number) {
   return Math.atan2(Math.sin(angle), Math.cos(angle))
 }
 
-export interface ShipDraw { pose: Pose; thrustAngle: number; power: number; turnEffort: number; name: string }
+export interface ShipDraw { acceleration: Vec; pose: Pose; thrustAngle: number; power: number; exhaustAngle: number; turnEffort: number; name: string }
 
-/** Hull, gun, speed line and the mount's blind sector. All of them share one world projection. */
+/** Flight platform HUD, attitude jets and articulated geometric pilot. */
 export function drawShip(ctx: CanvasRenderingContext2D, camera: Camera, ship: ShipDraw) {
   const { width, height } = ctx.canvas
   const { pose } = ship
@@ -47,14 +48,6 @@ export function drawShip(ctx: CanvasRenderingContext2D, camera: Camera, ship: Sh
     ctx.lineTo(tip.x, tip.y)
     ctx.stroke()
   }
-  // Exhaust points opposite the hull's thrust axis.
-  const exhaust = rim(ship.thrustAngle + Math.PI, 3 + ship.power * 8)
-  ctx.strokeStyle = ship.power > 0 ? '#ff965c' : '#ff965c44'
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.moveTo(origin.x, origin.y)
-  ctx.lineTo(exhaust.x, exhaust.y)
-  ctx.stroke()
   // Opposed attitude jets produce torque; reverse firing brakes angular motion.
   if (Math.abs(ship.turnEffort) > 0.01) {
     ctx.save()
@@ -69,16 +62,7 @@ export function drawShip(ctx: CanvasRenderingContext2D, camera: Camera, ship: Sh
     }
     ctx.restore()
   }
-  const nose = at(pose.x + Math.cos(pose.heading) * 3.2, pose.y + Math.sin(pose.heading) * 3.2)
-  const port = at(pose.x + Math.cos(pose.heading + 2.5) * 2.1, pose.y + Math.sin(pose.heading + 2.5) * 2.1)
-  const starboard = at(pose.x + Math.cos(pose.heading - 2.5) * 2.1, pose.y + Math.sin(pose.heading - 2.5) * 2.1)
-  ctx.beginPath()
-  ctx.moveTo(nose.x, nose.y)
-  ctx.lineTo(port.x, port.y)
-  ctx.lineTo(starboard.x, starboard.y)
-  ctx.closePath()
-  ctx.fillStyle = '#69d5d4'
-  ctx.fill()
+  drawHumanoid(ctx, camera, pose, ship.acceleration, false, ship.exhaustAngle, ship.power)
   ctx.fillStyle = '#fff'
   ctx.font = '12px sans-serif'
   ctx.fillText(ship.name, origin.x + 12, origin.y - 6)

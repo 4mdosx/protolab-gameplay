@@ -1,12 +1,15 @@
 import type { Camera } from '../../dogfight/camera'
 import type { Id, World } from '../engine/world'
 import { drawBuilding, drawTerrain, type Facade } from './city'
+import { drawHumanoid } from './humanoid'
 import { drawShip, lerpPose } from './ship'
 import { flightPoint } from '../../dogfight/projection'
 import { worldToScreen } from './view'
 import { drawDrones } from './drones'
 import { drawExhaust } from './exhaust'
 import { SIM_STEP } from '../engine/clock'
+
+const reactions = new WeakMap<World, Map<Id, { time: number; x: number; y: number }>>()
 
 function overlaps(face: Facade, x: number, y: number) {
   return x > face.x - 14 && x < face.x + face.w + 14 && y > face.y - 14 && y < face.y + face.h + 14
@@ -20,7 +23,19 @@ export function drawFrame(ctx: CanvasRenderingContext2D, world: World, camera: C
   const ship = world.ship.get(id)
   const previous = world.previous.get(id)
   if (!body || !motion || !ship || !previous) return
+  const command = world.command.get(id)
+  const braking = command?.braking && Math.hypot(motion.velocity.x, motion.velocity.y) > .05
+  const exhaustAngle = braking ? Math.atan2(motion.velocity.y, motion.velocity.x) : (command?.thrustAngle ?? body.heading) + Math.PI
+  const nozzlePower = braking ? 1.5 : command?.dashFraction ? 2.5 : command?.power ?? 0
   const pose = lerpPose(previous, { x: body.x, y: body.y, heading: body.heading, vx: motion.velocity.x, vy: motion.velocity.y }, alpha)
+  const renderTime = Math.max(0, world.time - SIM_STEP + alpha * SIM_STEP)
+  let states = reactions.get(world)
+  if (!states) { states = new Map(); reactions.set(world, states) }
+  const reaction = states.get(id) ?? { time: renderTime, x: 0, y: 0 }
+  const blend = 1 - Math.exp(-12 * Math.max(0, Math.min(.1, renderTime - reaction.time)))
+  reaction.x += ((motion.velocity.x - previous.vx) / SIM_STEP - reaction.x) * blend
+  reaction.y += ((motion.velocity.y - previous.vy) / SIM_STEP - reaction.y) * blend
+  reaction.time = renderTime; states.set(id, reaction)
   for (const box of world.city.buildings) if (box.kind !== 'tower') drawBuilding(ctx, camera, box)
   drawExhaust(ctx, camera, world, id, pose, Math.max(0, world.time - SIM_STEP + alpha * SIM_STEP))
   const towers = world.city.buildings.filter(box => box.kind === 'tower')
@@ -37,16 +52,8 @@ export function drawFrame(ctx: CanvasRenderingContext2D, world: World, camera: C
         ctx.save()
         for (let i = 0; i <= 5; i++) {
           const t = i / 5
-          const p = flightPoint(worldToScreen(camera, ctx.canvas.width, ctx.canvas.height, { x: dash.from.x + (dash.to.x - dash.from.x) * t, y: dash.from.y + (dash.to.y - dash.from.y) * t }), camera.scale)
           ctx.globalAlpha = dash.life / 0.35 * (0.15 + t * 0.4)
-          ctx.strokeStyle = '#a8fbff'; ctx.lineWidth = 2
-          ctx.beginPath()
-          for (let v = 0; v < 3; v++) {
-            const angle = dash.heading + v * Math.PI * 2 / 3
-            const x = p.x + Math.cos(angle) * 10, y = p.y + Math.sin(angle) * 7.8
-            if (v === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
-          }
-          ctx.closePath(); ctx.stroke()
+          drawHumanoid(ctx, camera, { ...pose, x: dash.from.x + (dash.to.x - dash.from.x) * t, y: dash.from.y + (dash.to.y - dash.from.y) * t, heading: dash.heading }, reaction, true, exhaustAngle)
         }
         if (dash.evade > 0) {
           const p = flightPoint(worldToScreen(camera, ctx.canvas.width, ctx.canvas.height, pose), camera.scale)
@@ -55,7 +62,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, world: World, camera: C
         ctx.restore()
       }
       drawDrones(ctx, camera, world, id, pose)
-      mark = drawShip(ctx, camera, { pose, turnEffort: body.turnEffort, name: ship.name, thrustAngle: world.command.get(id)?.thrustAngle ?? 0, power: world.command.get(id)?.power ?? 0 })
+      mark = drawShip(ctx, camera, { pose, acceleration: reaction, turnEffort: body.turnEffort, name: ship.name, thrustAngle: world.command.get(id)?.thrustAngle ?? 0, exhaustAngle, power: nozzlePower })
     }
   }
   ctx.save()

@@ -1,10 +1,12 @@
+import { legJoints } from './humanoid'
+import { HEIGHT_PROJECTION } from '../../dogfight/projection'
 import type { Pose } from '../components'
 import type { World, Id } from '../engine/world'
 import type { Camera } from './view'
 import { worldToScreen } from './view'
 import { flightPoint } from '../../dogfight/projection'
 
-interface Spark { x: number; y: number; vx: number; vy: number; born: number; life: number; nozzle: boolean; size: number }
+interface Spark { z?: number; x: number; y: number; vx: number; vy: number; born: number; life: number; nozzle: boolean; size: number }
 interface Trail { time: number; sparks: Spark[] }
 // Visual history belongs to the renderer, never to the simulation components.
 const trails = new WeakMap<World, Map<Id, Trail>>()
@@ -25,9 +27,13 @@ export function drawExhaust(ctx: CanvasRenderingContext2D, camera: Camera, world
       const age = elapsed * i / count
       const x = pose.x - pose.vx * age
       const y = pose.y - pose.vy * age
-      if (power > 0) trail.sparks.push({ x: x + Math.cos(angle) * 1.8, y: y + Math.sin(angle) * 1.8,
-        vx: pose.vx * 0.2 + Math.cos(angle) * (7 + power * 12), vy: pose.vy * 0.2 + Math.sin(angle) * (7 + power * 12),
-        born: time - age, life: 0.35 + power * 0.3, nozzle: true, size: 0.25 + power * 0.35 })
+      if (power > 0) for (const sign of [-1, 1]) {
+        const { heel } = legJoints(pose.heading, angle, sign)
+        const c = Math.cos(pose.heading), s = Math.sin(pose.heading)
+        trail.sparks.push({ x: x + c * heel[0] - s * heel[1], y: y + s * heel[0] + c * heel[1], z: heel[2],
+          vx: pose.vx * .2 + Math.cos(angle) * (7 + power * 12), vy: pose.vy * .2 + Math.sin(angle) * (7 + power * 12),
+          born: time - age, life: .35 + Math.min(power, 1) * .3, nozzle: true, size: .18 + power * .2 })
+      }
       if (Math.hypot(pose.vx, pose.vy) > 0.5) trail.sparks.push({ x: x - Math.cos(pose.heading) * 2, y: y - Math.sin(pose.heading) * 2,
         vx: 0, vy: 0, born: time - age, life: 2.5, nozzle: false, size: 0.35 })
     }
@@ -75,6 +81,7 @@ export function drawExhaust(ctx: CanvasRenderingContext2D, camera: Camera, world
     const fade = 1 - age / spark.life
     const point = flightPoint(worldToScreen(camera, ctx.canvas.width, ctx.canvas.height,
       { x: spark.x + spark.vx * age, y: spark.y + spark.vy * age }), camera.scale)
+    point.y -= (spark.z ?? 0) * HEIGHT_PROJECTION * camera.scale
     ctx.globalAlpha = fade * (spark.nozzle ? 0.85 : 0.5)
     ctx.fillStyle = spark.nozzle ? (fade > 0.7 ? '#fff0b0' : '#ff783e') : '#69d5ef'
     ctx.beginPath()
