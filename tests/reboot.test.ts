@@ -1,3 +1,5 @@
+import { cameraScaleForSpeed, followCamera, screenToWorld, worldToScreen } from '../experiments/fleet-collection/reboot/render/view'
+import { gunSystem } from '../experiments/fleet-collection/reboot/systems/gun'
 import { applyHandling, type HandlingId } from '../experiments/fleet-collection/reboot/handling'
 import { motionSystem } from '../experiments/fleet-collection/reboot/systems/motion'
 import { describe, expect, it } from 'vitest'
@@ -147,7 +149,7 @@ describe('reboot destroyer', () => {
     const motion = world.motion.get(id)!
     body.heading = Math.PI / 4
     motion.velocity = { x: 30, y: 0 }
-    motion.drag = 0
+    motion.drag = 0; motion.sideDrag = 0
     motionSystem(world, 0.1)
     expect(motion.velocity.y).toBeGreaterThan(0)
     expect(Math.hypot(motion.velocity.x, motion.velocity.y)).toBeLessThan(30)
@@ -197,7 +199,7 @@ describe('reboot destroyer', () => {
     world.city.buildings = []
     const id = manualShip(world)!
     const motion = world.motion.get(id)!
-    motion.drag = 0; motion.lateralGrip = 0
+    motion.drag = 0; motion.sideDrag = 0; motion.lateralGrip = 0
     world.input.fireQueue = [0]
     stepWorld(world)
     expect(world.recoil.get(id)).toHaveLength(2)
@@ -217,6 +219,108 @@ describe('reboot destroyer', () => {
     expect(motion.velocity.x).toBeCloseTo(coast)
   })
 
+  it('passive drag preserves forward glide better than broadside motion without adding energy', () => {
+    const coast = (heading: number) => {
+      const world = createWorld(17)
+      world.city.buildings = []
+      const id = manualShip(world)!
+      const motion = world.motion.get(id)!
+      world.body.get(id)!.heading = heading
+      motion.lateralGrip = 0
+      motion.velocity = { x: 30, y: 0 }
+      for (let i = 0; i < 10; i++) motionSystem(world, 0.1)
+      return Math.hypot(motion.velocity.x, motion.velocity.y)
+    }
+    const forward = coast(0), broadside = coast(Math.PI / 2)
+    expect(forward).toBeLessThan(30)
+    expect(broadside).toBeLessThan(forward)
+    expect(forward).toBeCloseTo(30 / (1 + (216 / 45 ** 2) / 12 * 30), 5)
+  })
+
+  it('brakes to rest without reversing and consumes energy only while slowing', () => {
+    const world = createWorld(17)
+    world.city.buildings = []
+    const id = manualShip(world)!
+    world.motion.get(id)!.velocity = { x: 5, y: 0 }
+    world.input.brake = true
+    world.input.throttle = 3
+    stepWorld(world)
+    expect(world.energy.get(id)!.value).toBeLessThan(100)
+    for (let i = 0; i < 10; i++) stepWorld(world)
+    expect(world.motion.get(id)!.velocity.x).toBeCloseTo(0)
+    expect(world.motion.get(id)!.velocity.y).toBeCloseTo(0)
+  })
+
+  it('charges dash once, respects cooldown and falls back from full thrust when depleted', () => {
+    const world = createWorld(17)
+    world.city.buildings = []
+    const id = manualShip(world)!
+    const energy = world.energy.get(id)!
+    world.input = { reverseControl: true, turn: 0, throttle: 0, dashRequested: true, aim: { x: 1000, y: 25 } }
+    stepWorld(world)
+    expect(energy.value).toBe(75)
+    expect(world.motion.get(id)!.velocity.x).toBeGreaterThan(4)
+    world.input.dashRequested = true
+    stepWorld(world)
+    expect(energy.value).toBe(75)
+    expect(world.input.dashRequested).toBe(false)
+    for (let i = 0; i < 5; i++) stepWorld(world)
+    expect(energy.dashLeft).toBe(0)
+    expect(energy.value).toBeGreaterThan(75)
+    energy.value = 0; energy.locked = true
+    world.input.throttle = 3
+    stepWorld(world)
+    expect(world.command.get(id)!.power).toBe(0.35)
+    expect(energy.value).toBeGreaterThan(0)
+    world.input.brake = true
+    world.input.dashRequested = true
+    stepWorld(world)
+    expect(world.command.get(id)!.braking).toBe(false)
+    expect(energy.dashLeft).toBe(0)
+  })
+
+  it('gives destroyers one extra dash displacement and stops at towers', () => {
+    for (const wall of [false, true]) {
+      const world = createWorld(17)
+      const id = manualShip(world)!
+      applyHandling(world, id, 'destroyer')
+      const body = world.body.get(id)!
+      const x = body.x
+      world.city.buildings = wall ? [{ id: 'dash-wall', x: x + 5, y: body.y - 10, width: 2, height: 20, blocks: ['surface'], kind: 'tower' }] : []
+      world.input = { reverseControl: true, turn: 0, throttle: 0, dashRequested: true, aim: { x: x + 100, y: body.y } }
+      stepWorld(world)
+      if (wall) expect(body.x).toBeLessThan(x + 3)
+      else expect(body.x).toBeGreaterThan(x + 8)
+      expect(world.motion.get(id)!.velocity.x).toBeLessThan(10)
+      expect(world.command.get(id)!.dashStep).toBe(0)
+      expect(world.energy.get(id)!.value).toBe(75)
+    }
+  })
+
+  it('protects the destroyer landing briefly but not the transit or later impacts', () => {
+    for (const transit of [false, true]) {
+      const world = createWorld(17)
+      world.city.buildings = []
+      const id = manualShip(world)!
+      applyHandling(world, id, 'destroyer')
+      const body = world.body.get(id)!
+      world.projectiles.push({ x: body.x + (transit ? 4 : 8), y: body.y, vx: 0, vy: 0, radius: .1, life: 3, weapon: 1 })
+      world.input = { reverseControl: true, turn: 0, throttle: 0, dashRequested: true, aim: { x: body.x + 100, y: body.y } }
+      stepWorld(world)
+      if (transit) expect(world.ship.get(id)!.hp).toBeLessThan(100)
+      else expect(world.ship.get(id)!.hp).toBe(100)
+      expect(world.dashVisual.get(id)!.evade).toBeGreaterThan(0)
+      if (!transit) {
+        motionSystem(world, .13)
+        expect(world.dashVisual.get(id)!.evade).toBe(0)
+        world.projectiles[0].x = body.x
+        world.projectiles[0].y = body.y
+        gunSystem(world, .1)
+        expect(world.ship.get(id)!.hp).toBeLessThan(100)
+      }
+    }
+  })
+
   it('does not sail through a tower', () => {
     const world = createWorld(17)
     const tower = world.city.buildings.find(box => box.kind === 'tower')
@@ -229,5 +333,30 @@ describe('reboot destroyer', () => {
     world.input = { reverseControl: true, turn: 0, throttle: 3, aim: { x: body.x + 100, y: body.y } }
     for (let i = 0; i < 30; i++) stepWorld(world)
     expect(body.x).toBeLessThan(tower!.x - 1.5)
+  })
+})
+
+describe('speed camera', () => {
+  it('widens the view monotonically and clamps both ends', () => {
+    expect(cameraScaleForSpeed(0)).toBe(5)
+    expect(cameraScaleForSpeed(8)).toBe(5)
+    expect(cameraScaleForSpeed(30)).toBeLessThan(5)
+    expect(cameraScaleForSpeed(60)).toBeCloseTo(960 / 360)
+    expect(cameraScaleForSpeed(200)).toBe(cameraScaleForSpeed(60))
+    for (let speed = 1; speed < 100; speed++) expect(cameraScaleForSpeed(speed)).toBeLessThanOrEqual(cameraScaleForSpeed(speed - 1))
+  })
+  it('smooths zoom consistently across frame rates and preserves pointer projection', () => {
+    const run = (hz: number) => {
+      let camera = { x: 0, y: 0, scale: 5 }
+      for (let i = 0; i < hz; i++) camera = followCamera(camera, { x: 0, y: 0 }, 1 / hz, 60)
+      return camera
+    }
+    const camera = run(60)
+    expect(camera.scale).toBeCloseTo(run(30).scale, 8)
+    expect(camera.scale).toBeGreaterThan(cameraScaleForSpeed(60))
+    const point = { x: 35, y: -20 }
+    const screen = worldToScreen(camera, 960, 600, point)
+    const restored = screenToWorld(camera, 960, 600, screen.x, screen.y)
+    expect(restored.x).toBeCloseTo(point.x); expect(restored.y).toBeCloseTo(point.y)
   })
 })

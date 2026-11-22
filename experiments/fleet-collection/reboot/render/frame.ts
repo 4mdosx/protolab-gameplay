@@ -32,6 +32,28 @@ export function drawFrame(ctx: CanvasRenderingContext2D, world: World, camera: C
       const facade = drawBuilding(ctx, camera, item.box)
       if (facade) facades.push(facade)
     } else {
+      const dash = world.dashVisual.get(id)
+      if (dash) {
+        ctx.save()
+        for (let i = 0; i <= 5; i++) {
+          const t = i / 5
+          const p = flightPoint(worldToScreen(camera, ctx.canvas.width, ctx.canvas.height, { x: dash.from.x + (dash.to.x - dash.from.x) * t, y: dash.from.y + (dash.to.y - dash.from.y) * t }), camera.scale)
+          ctx.globalAlpha = dash.life / 0.35 * (0.15 + t * 0.4)
+          ctx.strokeStyle = '#a8fbff'; ctx.lineWidth = 2
+          ctx.beginPath()
+          for (let v = 0; v < 3; v++) {
+            const angle = dash.heading + v * Math.PI * 2 / 3
+            const x = p.x + Math.cos(angle) * 10, y = p.y + Math.sin(angle) * 7.8
+            if (v === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+          }
+          ctx.closePath(); ctx.stroke()
+        }
+        if (dash.evade > 0) {
+          const p = flightPoint(worldToScreen(camera, ctx.canvas.width, ctx.canvas.height, pose), camera.scale)
+          ctx.globalAlpha = 0.8; ctx.beginPath(); ctx.ellipse(p.x, p.y, 17, 13, 0, 0, Math.PI * 2); ctx.stroke()
+        }
+        ctx.restore()
+      }
       drawDrones(ctx, camera, world, id, pose)
       mark = drawShip(ctx, camera, { pose, turnEffort: body.turnEffort, name: ship.name, thrustAngle: world.command.get(id)?.thrustAngle ?? 0, power: world.command.get(id)?.power ?? 0 })
     }

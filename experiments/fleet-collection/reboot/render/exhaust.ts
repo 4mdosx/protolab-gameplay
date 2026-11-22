@@ -15,8 +15,9 @@ export function drawExhaust(ctx: CanvasRenderingContext2D, camera: Camera, world
   let trail = ships.get(id)
   if (!trail || time < trail.time) { trail = { time, sparks: [] }; ships.set(id, trail) }
   const command = world.command.get(id)
-  const power = command?.power ?? 0
-  const angle = (command?.thrustAngle ?? pose.heading) + Math.PI
+  const braking = command?.braking && Math.hypot(pose.vx, pose.vy) > 0.05
+  const power = braking ? 1.5 : command?.dashFraction ? 2.5 : command?.power ?? 0
+  const angle = braking ? Math.atan2(pose.vy, pose.vx) : (command?.thrustAngle ?? pose.heading) + Math.PI
   const elapsed = Math.max(0, Math.min(0.15, time - trail.time))
   if (elapsed > 0) {
     const count = Math.ceil(elapsed / 0.015)

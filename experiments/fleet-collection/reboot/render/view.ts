@@ -5,8 +5,22 @@ export type { Camera }
 
 const Y_SCALE = 0.78
 
-export function followCamera(camera: Camera, target: Vec, seconds: number): Camera {
-  return smoothCamera(camera, { x: target.x, y: target.y, scale: 5 }, seconds)
+/** Absolute speed mapping shared by all hulls; dash displacement itself does not trigger zoom. */
+export function cameraScaleForSpeed(speed: number): number {
+  const t = Math.max(0, Math.min(1, (speed - 8) / 52))
+  const eased = t * t * (3 - 2 * t)
+  // At 960px wide: 192m close view, expanding to 360m at 60m/s.
+  return 960 / (192 + 168 * eased)
+}
+
+export function followCamera(camera: Camera, target: Vec, seconds: number, speed = 0): Camera {
+  const next = smoothCamera(camera, { x: target.x, y: target.y, scale: camera.scale }, seconds)
+  const desired = cameraScaleForSpeed(speed)
+  const dt = Math.max(0, Math.min(seconds, 0.05))
+  // Slower zoom than position tracking, monotonic and independent of frame rate.
+  next.scale = camera.scale + (desired - camera.scale) * (1 - Math.exp(-1.8 * dt))
+  next.vScale = 0
+  return next
 }
 
 export function worldToScreen(camera: Camera, width: number, height: number, point: Vec) {

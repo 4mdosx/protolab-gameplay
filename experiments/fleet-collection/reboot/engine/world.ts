@@ -1,4 +1,5 @@
-import type { Body, Command, DroneGun, Input, Motion, Pilot, Pose, Projectile, Recoil, Ship } from '../components'
+import type { Body, Command, DashVisual, Energy, DroneGun, Input, Motion, Pilot, Pose, Projectile, Recoil, Ship } from '../components'
+import { energySystem } from '../systems/energy'
 import { HANDLING } from '../handling'
 import { SIM_STEP } from './clock'
 import { controlSystem } from '../systems/control'
@@ -11,6 +12,8 @@ import { resolveCharacter } from '../../config'
 export type Id = number
 
 export interface World {
+  dashVisual: Map<Id, DashVisual>
+  energy: Map<Id, Energy>
   recoil: Map<Id, Recoil[]>
   projectiles: Projectile[]
   nextId: Id
@@ -44,6 +47,7 @@ function snapshot(world: World) {
 export function stepWorld(world: World, dt = SIM_STEP) {
   snapshot(world)
   controlSystem(world)
+  energySystem(world, dt)
   motionSystem(world, dt)
   gunSystem(world, dt)
   citySystem(world)
@@ -52,6 +56,8 @@ export function stepWorld(world: World, dt = SIM_STEP) {
 
 export function createWorld(mapSeed = 17): World {
   const world: World = {
+    dashVisual: new Map(),
+    energy: new Map(),
     recoil: new Map(),
     projectiles: [],
     nextId: 1,
@@ -70,8 +76,9 @@ export function createWorld(mapSeed = 17): World {
   const hull = resolveCharacter(0)
   const id = world.nextId++
   world.ids.push(id)
-  world.ship.set(id, { name: hull.name })
+  world.ship.set(id, { name: hull.name, hp: 100 })
   world.body.set(id, { x: 15, y: 25, heading: 0, turnRate: 0, turnEffort: 0 })
+  world.energy.set(id, { value: 100, dashLeft: 0, dashCooldown: 0, locked: false })
   world.motion.set(id, { velocity: { x: 0, y: 0 }, ...HANDLING.cruiser })
   world.drones.set(id, ([-1, 1] as const).map(side => ({ weaponClass: 'cruiser', cooldown: 0, wavesLeft: 0, waveTimer: 0, name: side === -1 ? '主炮' : '副炮', side, center: side * Math.PI / 6, target: 0, local: 0, arc: Math.PI * 40 / 180, traverse: Math.PI / 3, aim: null, dead: false })))
   world.pilot.set(id, { scheme: 'manual' })

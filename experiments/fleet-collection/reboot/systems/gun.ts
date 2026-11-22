@@ -1,4 +1,5 @@
 import type { World } from '../engine/world'
+import { damageShip, segmentCircle } from './hit'
 import { BARRAGES } from '../weapons'
 import { terrainImpact } from '../../dogfight/terrain'
 
@@ -10,7 +11,18 @@ export function gunSystem(world: World, dt: number) {
   if (!(dt > 0)) return
   for (const shot of world.projectiles) {
     const next = { x: shot.x + shot.vx * dt, y: shot.y + shot.vy * dt }
-    if (terrainImpact(shot, next, 'surface', world.city.buildings, shot.radius)) shot.life = 0
+    const wall = terrainImpact(shot, next, 'surface', world.city.buildings, shot.radius)
+    let first = wall ?? Infinity
+    let target: number | undefined
+    for (const id of world.ids) {
+      if (shot.owner === id || (world.ship.get(id)?.hp ?? 0) <= 0 || (world.dashVisual.get(id)?.evade ?? 0) > 0) continue
+      const body = world.body.get(id)
+      if (!body) continue
+      const hit = segmentCircle(shot, next, body, 2 + shot.radius)
+      if (hit !== null && hit < first) { first = hit; target = id }
+    }
+    if (shot.life > 0 && target !== undefined) damageShip(world, target, shot)
+    else if (wall !== null) shot.life = 0
     shot.x = next.x; shot.y = next.y; shot.life -= dt
   }
   world.projectiles = world.projectiles.filter(shot => shot.life > 0)
@@ -47,7 +59,7 @@ export function gunSystem(world: World, dt: number) {
               x: body.x + Math.cos(sideAngle) * 4.5 + Math.cos(barrel) * 3 - Math.sin(barrel) * spacing,
               y: body.y + Math.sin(sideAngle) * 4.5 + Math.sin(barrel) * 3 + Math.cos(barrel) * spacing,
               vx: Math.cos(angle) * spec.speed + velocity.x, vy: Math.sin(angle) * spec.speed + velocity.y,
-              life: 3, radius: spec.radius, weapon: index + 1,
+              owner: id, life: 3, radius: spec.radius, weapon: index + 1,
             })
           }
           // One sustained force pulse per wave, using the actual launch directions.
