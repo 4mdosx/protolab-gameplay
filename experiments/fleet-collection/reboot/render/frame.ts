@@ -2,6 +2,11 @@ import type { Camera } from '../../dogfight/camera'
 import type { Id, World } from '../engine/world'
 import { drawBuilding, drawTerrain, type Facade } from './city'
 import { drawShip, lerpPose } from './ship'
+import { flightPoint } from '../../dogfight/projection'
+import { worldToScreen } from './view'
+import { drawDrones } from './drones'
+import { drawExhaust } from './exhaust'
+import { SIM_STEP } from '../engine/clock'
 
 function overlaps(face: Facade, x: number, y: number) {
   return x > face.x - 14 && x < face.x + face.w + 14 && y > face.y - 14 && y < face.y + face.h + 14
@@ -12,12 +17,12 @@ export function drawFrame(ctx: CanvasRenderingContext2D, world: World, camera: C
   drawTerrain(ctx, camera, world.city)
   const body = world.body.get(id)
   const motion = world.motion.get(id)
-  const gun = world.gun.get(id)
   const ship = world.ship.get(id)
   const previous = world.previous.get(id)
-  if (!body || !motion || !gun || !ship || !previous) return
-  const pose = lerpPose(previous, { x: body.x, y: body.y, heading: body.heading, vx: motion.velocity.x, vy: motion.velocity.y, gun: gun.local, dead: gun.dead, aim: gun.aim }, alpha)
+  if (!body || !motion || !ship || !previous) return
+  const pose = lerpPose(previous, { x: body.x, y: body.y, heading: body.heading, vx: motion.velocity.x, vy: motion.velocity.y }, alpha)
   for (const box of world.city.buildings) if (box.kind !== 'tower') drawBuilding(ctx, camera, box)
+  drawExhaust(ctx, camera, world, id, pose, Math.max(0, world.time - SIM_STEP + alpha * SIM_STEP))
   const towers = world.city.buildings.filter(box => box.kind === 'tower')
   const order = [...towers.map(box => ({ depth: box.y + box.height, box })), { depth: pose.y, box: null }].sort((a, b) => a.depth - b.depth)
   const facades: Facade[] = []
@@ -26,8 +31,22 @@ export function drawFrame(ctx: CanvasRenderingContext2D, world: World, camera: C
     if (item.box) {
       const facade = drawBuilding(ctx, camera, item.box)
       if (facade) facades.push(facade)
-    } else mark = drawShip(ctx, camera, { pose, arc: gun.arc, name: ship.name })
+    } else {
+      drawDrones(ctx, camera, world, id, pose)
+      mark = drawShip(ctx, camera, { pose, turnEffort: body.turnEffort, name: ship.name, thrustAngle: world.command.get(id)?.thrustAngle ?? 0, power: world.command.get(id)?.power ?? 0 })
+    }
   }
+  ctx.save()
+  ctx.strokeStyle = '#ffe6a0'; ctx.lineWidth = 2.5
+  for (const shot of world.projectiles) {
+    const at = (x: number, y: number) => flightPoint(worldToScreen(camera, ctx.canvas.width, ctx.canvas.height, { x, y }), camera.scale)
+    ctx.lineWidth = shot.radius * camera.scale * 2
+    ctx.lineCap = 'round'
+    const head = at(shot.x, shot.y)
+    const tail = at(shot.x - shot.vx * 0.035, shot.y - shot.vy * 0.035)
+    ctx.beginPath(); ctx.moveTo(tail.x, tail.y); ctx.lineTo(head.x, head.y); ctx.stroke()
+  }
+  ctx.restore()
   if (!mark) return
   const placed = mark
   const hidden = facades.some(face => face.depth > placed.depth && overlaps(face, placed.x, placed.y))

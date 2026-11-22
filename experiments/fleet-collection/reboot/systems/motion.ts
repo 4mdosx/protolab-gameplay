@@ -2,11 +2,8 @@ import type { Vec } from '../components'
 import type { World } from '../engine/world'
 import { terrainImpact, type TerrainBox } from '../../dogfight/terrain'
 
-const TURN_RATE = 0.8
-const TURN_ACCEL = 1.2
 const RADIUS = 2
 
-const wrap = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle))
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
 function blocked(from: Vec, to: Vec, boxes: TerrainBox[]) {
@@ -32,15 +29,41 @@ export function motionSystem(world: World, dt: number) {
     const motion = world.motion.get(id)
     const command = world.command.get(id)
     if (!body || !motion || !command) continue
-    const errorX = command.velocity.x - motion.velocity.x
-    const errorY = command.velocity.y - motion.velocity.y
-    const error = Math.hypot(errorX, errorY) || 1
-    const scale = Math.min(1, motion.thrust * dt / error)
-    const velocity = { x: motion.velocity.x + errorX * scale, y: motion.velocity.y + errorY * scale }
-    const delta = wrap(command.facing - body.heading)
-    const desiredRate = clamp(delta * 2, -TURN_RATE, TURN_RATE)
-    body.turnRate += clamp(desiredRate - body.turnRate, -TURN_ACCEL * dt, TURN_ACCEL * dt)
-    body.heading += body.turnRate * dt
+    // Quadratic drag produces terminal speed sqrt(force / drag).
+    // Substeps keep drag and angular response stable at the fixed simulation tick.
+    const velocity = { ...motion.velocity }
+    const recoil = world.recoil.get(id) ?? []
+    const steps = Math.ceil(dt / 0.01)
+    const h = dt / steps
+    for (let i = 0; i < steps; i++) {
+      const desiredRate = command.turn * motion.maxTurnRate
+      const turnAccel = motion.torque / motion.inertia
+      const change = clamp(desiredRate - body.turnRate, -turnAccel * h, turnAccel * h)
+      body.turnEffort = change / (turnAccel * h)
+      body.turnRate += change
+      body.heading += body.turnRate * h
+      // Lateral stabilization removes sideways slip; it cannot add kinetic energy.
+      // A force cap prevents high-speed turns from gaining unlimited grip.
+      const nx = -Math.sin(body.heading), ny = Math.cos(body.heading)
+      const slip = velocity.x * nx + velocity.y * ny
+      const lateralAccel = clamp(-slip * motion.lateralGrip, -motion.maxLateralAccel, motion.maxLateralAccel)
+      velocity.x += nx * lateralAccel * h
+      velocity.y += ny * lateralAccel * h
+      for (const pulse of recoil) {
+        const active = Math.min(h, Math.max(0, pulse.remaining))
+        velocity.x += pulse.fx / motion.mass * active
+        velocity.y += pulse.fy / motion.mass * active
+        pulse.remaining = Math.max(0, pulse.remaining - h)
+      }
+      const speed = Math.hypot(velocity.x, velocity.y)
+      const force = motion.thrust * command.power
+      velocity.x += Math.cos(command.thrustAngle) * force / motion.mass * h
+      velocity.y += Math.sin(command.thrustAngle) * force / motion.mass * h
+      const damping = 1 / (1 + motion.drag * speed / motion.mass * h)
+      velocity.x *= damping
+      velocity.y *= damping
+    }
+    world.recoil.set(id, recoil.filter(pulse => pulse.remaining > 1e-8))
     const from = { x: body.x, y: body.y }
     const next = slide(from, { x: from.x + velocity.x * dt, y: from.y + velocity.y * dt }, boxes)
     body.x = next.x

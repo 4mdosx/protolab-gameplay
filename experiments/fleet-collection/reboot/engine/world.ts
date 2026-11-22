@@ -1,4 +1,5 @@
-import type { Body, Command, Gun, Input, Motion, Pilot, Pose, Ship } from '../components'
+import type { Body, Command, DroneGun, Input, Motion, Pilot, Pose, Projectile, Recoil, Ship } from '../components'
+import { HANDLING } from '../handling'
 import { SIM_STEP } from './clock'
 import { controlSystem } from '../systems/control'
 import { motionSystem } from '../systems/motion'
@@ -10,12 +11,14 @@ import { resolveCharacter } from '../../config'
 export type Id = number
 
 export interface World {
+  recoil: Map<Id, Recoil[]>
+  projectiles: Projectile[]
   nextId: Id
   ids: Id[]
   ship: Map<Id, Ship>
   body: Map<Id, Body>
   motion: Map<Id, Motion>
-  gun: Map<Id, Gun>
+  drones: Map<Id, DroneGun[]>
   pilot: Map<Id, Pilot>
   command: Map<Id, Command>
   previous: Map<Id, Pose>
@@ -32,9 +35,8 @@ function snapshot(world: World) {
   for (const id of world.ids) {
     const body = world.body.get(id)
     const motion = world.motion.get(id)
-    const gun = world.gun.get(id)
-    if (!body || !motion || !gun) continue
-    world.previous.set(id, { x: body.x, y: body.y, heading: body.heading, vx: motion.velocity.x, vy: motion.velocity.y, gun: gun.local, dead: gun.dead, aim: gun.aim })
+    if (!body || !motion) continue
+    world.previous.set(id, { x: body.x, y: body.y, heading: body.heading, vx: motion.velocity.x, vy: motion.velocity.y })
   }
 }
 
@@ -50,30 +52,30 @@ export function stepWorld(world: World, dt = SIM_STEP) {
 
 export function createWorld(mapSeed = 17): World {
   const world: World = {
+    recoil: new Map(),
+    projectiles: [],
     nextId: 1,
     ids: [],
     ship: new Map(),
     body: new Map(),
     motion: new Map(),
-    gun: new Map(),
+    drones: new Map(),
     pilot: new Map(),
     command: new Map(),
     previous: new Map(),
     city: generateCity(mapSeed),
-    input: { x: 0, y: 0, aim: null },
+    input: { reverseControl: true, turn: 0, throttle: 0, aim: null },
     time: 0,
   }
   const hull = resolveCharacter(0)
-  const mount = hull.weaponSlots.find(slot => slot.weapon.arc && slot.weapon.traverse)
-  if (!mount?.weapon.arc || !mount.weapon.traverse) throw new Error('destroyer main gun has no arc')
   const id = world.nextId++
   world.ids.push(id)
   world.ship.set(id, { name: hull.name })
-  world.body.set(id, { x: 15, y: 25, heading: 0, turnRate: 0 })
-  world.motion.set(id, { velocity: { x: 0, y: 0 }, cruise: hull.speed * 3, thrust: 18 })
-  world.gun.set(id, { arc: mount.weapon.arc, traverse: mount.weapon.traverse, local: 0, aim: null, dead: false })
+  world.body.set(id, { x: 15, y: 25, heading: 0, turnRate: 0, turnEffort: 0 })
+  world.motion.set(id, { velocity: { x: 0, y: 0 }, ...HANDLING.cruiser })
+  world.drones.set(id, ([-1, 1] as const).map(side => ({ weaponClass: 'cruiser', cooldown: 0, wavesLeft: 0, waveTimer: 0, name: side === -1 ? '主炮' : '副炮', side, center: side * Math.PI / 6, target: 0, local: 0, arc: Math.PI * 40 / 180, traverse: Math.PI / 3, aim: null, dead: false })))
   world.pilot.set(id, { scheme: 'manual' })
-  world.command.set(id, { velocity: { x: 0, y: 0 }, facing: 0, aim: null })
+  world.command.set(id, { power: 0, thrustAngle: 0, turn: 0 })
   snapshot(world)
   return world
 }
