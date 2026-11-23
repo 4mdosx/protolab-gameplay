@@ -12,7 +12,7 @@ import { followCamera, screenToWorld } from './render/view'
 import type { Camera } from './render/view'
 
 const root = document.querySelector<HTMLElement>('#app')!
-root.innerHTML = `<header><a href="/">← 实验室</a><h1>低空战斗平台</h1><p>鼠标推进，${bindingLabel('stepUp')} / ${bindingLabel('stepLeft')} / ${bindingLabel('stepDown')} / ${bindingLabel('stepRight')} 四向 Step，${bindingLabel('toggleGear')} 切档，${bindingLabel('brake')} 按住制动，${bindingLabel('boost')} 按住满推，${bindingLabel('toggleTarget')} 预选目标，${bindingLabel('recenter')} 回正 / BD 定航向，${bindingLabel('fire')} 开火。${bindingLabel('selectPrimary')} / ${bindingLabel('selectSecondary')} 选炮，${bindingLabel('clearWeapon')} 返回驾驶。</p></header><section class="controls"><label>操控参数 <select id="handling"></select></label><label><input type="checkbox" id="dummy-fire">木桩射击</label><button id="reset-dummy">重置木桩</button><button id="play">暂停</button><button id="step">推进 ${SIM_STEP} 秒</button><label>出力 <select id="throttle"><option value="1">1 · ${THROTTLE_POWER[1] * 100}% 微调</option><option value="2">2 · ${THROTTLE_POWER[2] * 100}% 巡航</option></select></label><label><input type="checkbox" id="reverse-control" checked>控制反向（朝鼠标加速）</label><label>能量 <meter id="energy" min="0" max="${ENERGY.capacity}" value="${ENERGY.capacity}"></meter><span id="energy-status"></span></label><span id="status"></span></section><p id="mode-hint" role="status" aria-live="polite" style="padding:12px;border:1px solid;border-radius:8px"></p><div class="layout"><section><canvas id="field" width="960" height="600" aria-label="低空战斗平台战场"></canvas><p class="hint">镜头随实际速度平滑拉远（8 m/s 以下近景，60 m/s 达最远）。白线是速度，橙色尾焰表示喷口方向与出力，蓝色 HUD 航迹保留最近 2.5 秒的移动路径，绿色虚线为当前速度的 3 秒惯性路线（不计后续推力与碰撞），浅蓝色前后喷焰用于转向与角速度制动；无推进指令时靠惯性滑行并回能；BD 降低侧滑抑制，转向沿弧线进行。几何小人为机体，金色面罩指向船头；双腿与脚底尾焰指示喷口方向，身体倾斜与手臂后摆反映实际加速度，1 号为身侧单个浮游主炮，2 号为浮游副炮。红色船尾扇区为背部弱装甲提示（来自后方 ±45° 的炮弹伤害 ×1.5）。每门浮游炮独立按自己的炮口方向和弹幕配置开火。黄色扇形始终显示可用射界，选中时加亮，超出射界时炮停在边缘。低楼可穿过，高楼的金色虚线框会挡住船体。</p></section><aside><h2>这一拍</h2><div id="events"></div></aside></div>`
+root.innerHTML = `<header><a href="/">← 实验室</a><h1>低空战斗平台</h1><p>鼠标推进，${bindingLabel('stepUp')} / ${bindingLabel('stepLeft')} / ${bindingLabel('stepDown')} / ${bindingLabel('stepRight')} 四向 Step，${bindingLabel('toggleGear')} 切档，${bindingLabel('brake')} 按住制动，${bindingLabel('boost')} 按住满推，${bindingLabel('toggleTarget')} 预选目标，${bindingLabel('recenter')} 回正 / BD 定航向，${bindingLabel('fire')} 开火。${bindingLabel('selectPrimary')} / ${bindingLabel('selectSecondary')} 选炮，${bindingLabel('clearWeapon')} 返回驾驶。</p></header><section class="controls"><label>操作模式 <select id="control-mode"><option value="tail">尾喷口 · 鼠标船头</option><option value="free">自由喷口 · 原模式</option></select></label><label>操控参数 <select id="handling"></select></label><label><input type="checkbox" id="dummy-fire">木桩射击</label><button id="reset-dummy">重置木桩</button><button id="play">暂停</button><button id="step">推进 ${SIM_STEP} 秒</button><label>出力 <select id="throttle"><option value="1">1 · ${THROTTLE_POWER[1] * 100}% 微调</option><option value="2">2 · ${THROTTLE_POWER[2] * 100}% 巡航</option></select></label><label><input type="checkbox" id="reverse-control" checked>控制反向（朝鼠标加速）</label><label>能量 <meter id="energy" min="0" max="${ENERGY.capacity}" value="${ENERGY.capacity}"></meter><span id="energy-status"></span></label><span id="status"></span></section><p id="mode-hint" role="status" aria-live="polite" style="padding:12px;border:1px solid;border-radius:8px"></p><div class="layout"><section><canvas id="field" width="960" height="600" aria-label="低空战斗平台战场"></canvas><p class="hint">镜头随实际速度平滑拉远（8 m/s 以下近景，60 m/s 达最远）。白线是速度，橙色尾焰表示喷口方向与出力，蓝色 HUD 航迹保留最近 2.5 秒的移动路径，绿色虚线为当前速度的 3 秒惯性路线（不计后续推力与碰撞），浅蓝色前后喷焰用于转向与角速度制动；无推进指令时靠惯性滑行并回能；BD 降低侧滑抑制，转向沿弧线进行。几何小人为机体，金色面罩指向船头；双腿与脚底尾焰指示喷口方向，身体倾斜与手臂后摆反映实际加速度，1 号为身侧单个浮游主炮，2 号为浮游副炮。红色船尾扇区为背部弱装甲提示（来自后方 ±45° 的炮弹伤害 ×1.5）。每门浮游炮独立按自己的炮口方向和弹幕配置开火。黄色扇形始终显示可用射界，选中时加亮，超出射界时炮停在边缘。低楼可穿过，高楼的金色虚线框会挡住船体。</p></section><aside><h2>这一拍</h2><div id="events"></div></aside></div>`
 
 const canvas = document.querySelector<HTMLCanvasElement>('#field')!
 const ctx = canvas.getContext('2d')!
@@ -47,13 +47,17 @@ function pointerInWorld() {
   return pointer ? screenToWorld(camera, canvas.width, canvas.height, pointer.x, pointer.y) : null
 }
 
+const controlMode = document.querySelector<HTMLSelectElement>('#control-mode')!
 function sampleInput() {
+  input.controlMode = controlMode.value as 'tail' | 'free'
+
   if (world.ship.get(dummyId)!.hp <= 0) input.lockTarget = undefined
   input.reverseControl = reverseControl.checked
   input.aim = pointerInWorld()
 }
 
 const bindings = createBindings(action => {
+  if (action === 'recenter' && input.controlMode === 'tail') return
   if (action === 'recenter') {
     pilotInput.press(action, {
       recenterHeading: pointerThrustAngle(body, pointerInWorld(), reverseControl.checked),
@@ -76,7 +80,7 @@ function paint(seconds = 1 / 60) {
   canvas.style.outline = `2px solid ${weaponMode ? '#ffda80' : '#69d5d4'}`
   const hint = document.querySelector<HTMLElement>('#mode-hint')!
   hint.style.color = weaponMode ? '#ffda80' : '#69d5d4'
-  const modeHint = bd ? `锁定 BD｜${world.pilot.get(shipId)?.bdCourse === undefined ? command?.brakeFraction !== undefined ? '绕障制动' : command?.avoidingObstacle ? '正在绕障' : '鼠标给航向' : '航向已快照'} · 左键更新航向 · 船头和炮塔追踪目标 · 松开 ${bindingLabel('boost')} 退出`
+  const modeHint = input.controlMode === 'tail' ? `尾喷口模式｜鼠标转船头 · Q 按住 Boost${preselected ? '（辅助喷口朝目标机动）' : '（船尾向前推进）'} · C ${input.headingHold ? "恢复鼠标跟随" : "保持船头"} · ${input.selectedGun ? "选炮中船头保持 · " : ""}WASD 船体相对四向 Step · 0.5秒内接 Q 沿 Step 方向 Boost · E 制动 · F 锁定 · Shift 切档` : bd ? `锁定 BD｜${world.pilot.get(shipId)?.bdCourse === undefined ? command?.brakeFraction !== undefined ? '绕障制动' : command?.avoidingObstacle ? '正在绕障' : '鼠标给航向' : '航向已快照'} · 左键更新航向 · 船头和炮塔追踪目标 · 松开 ${bindingLabel('boost')} 退出`
     : weaponMode ? `武器模式 · ${selectedGun} 号炮｜鼠标瞄准 · 推进方向保持 · ${bindingLabel('fire')} 单炮开火`
     : `驾驶模式｜鼠标推进 · ${bindingLabel('fire')} 齐射`
   hint.textContent = `${modeHint}${preselected && !bd ? ' · 已预选木桩' : ''}`

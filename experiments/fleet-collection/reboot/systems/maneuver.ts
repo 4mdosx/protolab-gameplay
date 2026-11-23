@@ -126,7 +126,9 @@ export function chooseStep(
 
   const incoming = estimate(current).hits > 0
   const baseline = estimate(manual).burstEnd
-  const preferredAngle = STEP_ANGLE[direction]
+  const preferredAngle = world.input.controlMode === 'tail'
+    ? body.heading + ({ up: 0, down: Math.PI, left: -Math.PI / 2, right: Math.PI / 2 })[direction]
+    : STEP_ANGLE[direction]
   const directionX = Math.cos(preferredAngle)
   const directionY = Math.sin(preferredAngle)
   // Search the selected screen side only. Straight ahead wins equivalent routes.

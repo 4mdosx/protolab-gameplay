@@ -102,7 +102,7 @@ export function integrateMotion(
     const force = motion.thrust * power
     const angle = command.bd
       ? bdThrustAngle(command.thrustAngle, velocity, sideDrag, force, !!command.avoidingObstacle)
-      : step?.angle ?? command.thrustAngle
+      : step?.angle ?? (command.hullThrust ? body.heading : command.thrustAngle)
     command.appliedThrustAngle = angle
     velocity.x += ((Math.cos(angle) * force) / motion.mass) * h
     velocity.y += ((Math.sin(angle) * force) / motion.mass) * h

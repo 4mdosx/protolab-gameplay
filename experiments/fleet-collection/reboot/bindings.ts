@@ -9,6 +9,7 @@ interface Binding {
 }
 
 export const DEFAULT_BINDINGS: readonly Binding[] = [
+  { action: 'toggleHeadingHold', label: 'C', keys: ['KeyC'] },
   { action: 'stepUp', label: 'W', keys: ['KeyW'] },
   { action: 'stepLeft', label: 'A', keys: ['KeyA'] },
   { action: 'stepDown', label: 'S', keys: ['KeyS'] },

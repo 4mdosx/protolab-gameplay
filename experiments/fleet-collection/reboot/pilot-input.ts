@@ -2,7 +2,7 @@ import type { Input } from './components'
 
 export type PilotAction =
   | 'stepUp' | 'stepLeft' | 'stepDown' | 'stepRight' | 'brake' | 'boost'
-  | 'toggleGear' | 'recenter' | 'fire' | 'toggleTarget'
+  | 'toggleHeadingHold' | 'toggleGear' | 'recenter' | 'fire' | 'toggleTarget'
   | 'selectPrimary' | 'selectSecondary' | 'clearWeapon'
 
 interface CommandContext {
@@ -27,6 +27,9 @@ export function createPilotInput(input: Input) {
           if (action === 'boost' && !held.has(action)) input.boostPressed = true
           held.add(action)
           updateHeldControls()
+          break
+        case 'toggleHeadingHold':
+          input.headingHold = !input.headingHold
           break
         case 'toggleGear':
           input.throttle = input.throttle === 1 ? 2 : 1

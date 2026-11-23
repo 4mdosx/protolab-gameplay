@@ -11,6 +11,7 @@ export interface Gun { arc: number; traverse: number; local: number; aim: number
 
 /** Control requests after energy limits have been applied. */
 export interface Command {
+  hullThrust?: boolean
   power: number
   thrustAngle: number
   appliedThrustAngle?: number
@@ -24,6 +25,9 @@ export interface Command {
 }
 
 export interface Pilot {
+  heldHeading?: number
+  stepLink?: { angle: number; remaining: number }
+  boostCourse?: number
   scheme: 'manual'
   thrustAngle: number
   recenterAngle?: number
@@ -35,6 +39,8 @@ export type StepDirection = 'up' | 'left' | 'down' | 'right'
 
 /** Input sampled from the player controls. */
 export interface Input {
+  controlMode?: 'free' | 'tail'
+  headingHold?: boolean
   lockTarget?: number
   brake?: boolean
   recenterHeading?: number

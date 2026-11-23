@@ -26,6 +26,7 @@ export const BD = {
 }
 
 export const STEP = {
+  boostLinkWindow: 0.5,
   cost: 32,
   duration: 0.25,
   power: 4.5,

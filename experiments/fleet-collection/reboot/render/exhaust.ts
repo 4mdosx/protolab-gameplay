@@ -57,7 +57,10 @@ export function drawExhaust(
       const y = pose.y - pose.vy * age
       if (power > 0)
         for (const sign of [-1, 1]) {
-          const { heel } = legJoints(pose.heading, angle, sign)
+          const tailMode = world.input.controlMode === 'tail'
+          const relative = angle - pose.heading
+          const port = Math.round(relative / (Math.PI / 2)) * Math.PI / 2
+          const heel = tailMode ? [Math.cos(port) * 1.6, Math.sin(port) * 1.6, 0] : legJoints(pose.heading, angle, sign).heel
           const c = Math.cos(pose.heading),
             s = Math.sin(pose.heading)
           trail.sparks.push({

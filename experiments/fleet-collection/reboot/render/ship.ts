@@ -9,6 +9,7 @@ function wrap(angle: number) {
 }
 
 export interface ShipDraw {
+  tailMode?: boolean
   acceleration: Vec
   pose: Pose
   thrustAngle: number
@@ -84,7 +85,21 @@ export function drawShip(ctx: CanvasRenderingContext2D, camera: Camera, ship: Sh
     }
     ctx.restore()
   }
-  drawHumanoid(ctx, camera, pose, ship.acceleration, false, ship.exhaustAngle, ship.power)
+  if (ship.tailMode) {
+    ctx.save(); ctx.lineCap = 'round'
+    for (const offset of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+      const direction = pose.heading + offset
+      const port = rim(direction, 1.6)
+      ctx.fillStyle = '#637d8d'; ctx.beginPath(); ctx.arc(port.x, port.y, 2, 0, Math.PI * 2); ctx.fill()
+      const weight = Math.max(0, Math.cos(ship.exhaustAngle - direction)) * ship.power
+      if (weight < .02) continue
+      const tip = rim(direction, 1.6 + weight * 3)
+      ctx.strokeStyle = offset === Math.PI ? '#ffb35b' : '#91e9ff'
+      ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(port.x, port.y); ctx.lineTo(tip.x, tip.y); ctx.stroke()
+    }
+    ctx.restore()
+  }
+  drawHumanoid(ctx, camera, pose, ship.acceleration, false, ship.tailMode ? pose.heading + Math.PI : ship.exhaustAngle, ship.tailMode ? 0 : ship.power)
   ctx.fillStyle = '#fff'
   ctx.font = '12px sans-serif'
   ctx.fillText(ship.name, origin.x + 12, origin.y - 6)

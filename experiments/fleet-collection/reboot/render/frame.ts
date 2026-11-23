@@ -105,6 +105,7 @@ export function drawFrame(
       drawDrones(ctx, camera, world, id, pose)
       mark = drawShip(ctx, camera, {
         pose,
+        tailMode: world.input.controlMode === 'tail',
         acceleration: reaction,
         turnEffort,
         name: ship.name,

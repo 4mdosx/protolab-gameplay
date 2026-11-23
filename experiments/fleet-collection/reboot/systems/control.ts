@@ -23,6 +23,18 @@ export function controlSystem(world: World, dt: number) {
     const energy = world.energy.get(id)
     if (!pilot || !body || !motion || !energy) continue
 
+    const tailMode = input.controlMode === 'tail'
+    if (!input.boostHeld || input.brake || !tailMode) pilot.boostCourse = undefined
+    if (pilot.stepLink) {
+      pilot.stepLink.remaining -= dt
+      if (pilot.stepLink.remaining < -1e-8) pilot.stepLink = undefined
+    }
+    if (tailMode && input.boostPressed && pilot.stepLink && !input.brake) {
+      pilot.boostCourse = pilot.stepLink.angle
+    }
+    const holdHeading = tailMode && (input.headingHold || !!input.selectedGun)
+    if (holdHeading && pilot.heldHeading === undefined) pilot.heldHeading = body.heading
+    if (!holdHeading) pilot.heldHeading = undefined
     const pointerAngle = pointerThrustAngle(body, input.aim, input.reverseControl)
     const target = lockedTarget(world, id)
     const weaponMode = !!input.selectedGun
@@ -48,6 +60,7 @@ export function controlSystem(world: World, dt: number) {
       pilot.recenterAngle = undefined
       recenterError = undefined
     }
+    const mouseHeading = pointerThrustAngle(body, input.aim, true)
     const manual: Command = {
       power: weaponMode || pointerAngle !== undefined ? THROTTLE_POWER[input.throttle] : 0,
       thrustAngle: manualAngle,
@@ -55,19 +68,37 @@ export function controlSystem(world: World, dt: number) {
       turn: recenterError === undefined ? input.turn
         : Math.max(-1, Math.min(1, HEADING.gain * recenterError / motion.maxTurnRate)),
     }
+    if (tailMode) {
+      manual.hullThrust = true
+      manual.thrustAngle = body.heading
+      manual.power = THROTTLE_POWER[input.throttle]
+      manual.recentering = false
+      const desiredHeading = pilot.heldHeading ?? mouseHeading
+      manual.turn = desiredHeading === undefined ? 0 : Math.max(-1, Math.min(1, HEADING.gain * headingError(desiredHeading, body.heading) / motion.maxTurnRate))
+      pilot.recenterAngle = undefined
+      pilot.bdCourse = undefined
+    }
     const full = { ...manual, thrustAngle: thrustIntent, power: 1, fullThrust: true }
-    if (wantsBD && target) {
+    if (tailMode) {
+      full.hullThrust = !wantsBD
+      full.thrustAngle = wantsBD && target ? Math.atan2(target.y - body.y, target.x - body.x) : body.heading
+    }
+    if (!tailMode && wantsBD && target) {
       full.turn = Math.max(-1, Math.min(1, HEADING.gain * headingError(
         Math.atan2(target.y - body.y, target.x - body.x), body.heading,
       ) / motion.maxTurnRate))
     }
-    const thrustAvailable = !!target || weaponMode || pointerAngle !== undefined
-    const fullCommand = canUseFullThrust && thrustAvailable ? { ...full, bd: wantsBD } : undefined
+    const thrustAvailable = tailMode || !!target || weaponMode || pointerAngle !== undefined
+    if (tailMode && pilot.boostCourse !== undefined) {
+      full.hullThrust = false
+      full.thrustAngle = pilot.boostCourse
+    }
+    const fullCommand = canUseFullThrust && thrustAvailable ? { ...full, bd: wantsBD && pilot.boostCourse === undefined } : undefined
     const speed = Math.hypot(motion.velocity.x, motion.velocity.y)
     const brakeTime = Math.min(dt, speed / (motion.thrust / motion.mass * BRAKE.thrustMultiplier))
     const brakeCost = ENERGY.brakeDrain * brakeTime
     const brakeFraction = brakeCost > 0 ? Math.min(1, energy.value / brakeCost) : 0
-    if (canCaptureBDCourse && fullCommand && pilot.bdCourse === undefined) {
+    if (!tailMode && canCaptureBDCourse && fullCommand && pilot.bdCourse === undefined) {
       avoidBDObstacle(world, id, fullCommand, dt, brakeFraction)
     }
     const command = selectPropulsion(world, id, dt, pilot, energy, {
@@ -111,6 +142,8 @@ function selectPropulsion(
   if (input.brake) {
     if (input.boostHeld) pilot.boostInterrupted = true
     energy.step = undefined
+    pilot.stepLink = undefined
+    pilot.boostCourse = undefined
     energy.feedback = undefined
     if (!energy.locked && speed > BRAKE.minSpeed) {
       spendEnergy(energy, brakeCost * brakeFraction)
@@ -131,12 +164,16 @@ function selectPropulsion(
       } else {
         spendEnergy(energy, STEP.cost)
         energy.step = { angle, remaining: STEP.duration }
+        if (input.controlMode === 'tail') {
+          pilot.stepLink = { angle, remaining: STEP.boostLinkWindow }
+          if (input.boostPressed && input.boostHeld) pilot.boostCourse = angle
+        }
         energy.feedback = 'Step 已接管推进'
       }
     }
   }
   if (energy.step) {
-    if (input.boostHeld) pilot.boostInterrupted = true
+    if (input.boostHeld && pilot.boostCourse === undefined) pilot.boostInterrupted = true
     const { angle, remaining } = energy.step
     energy.step.remaining -= dt
     if (energy.step.remaining <= 1e-8) energy.step = undefined
