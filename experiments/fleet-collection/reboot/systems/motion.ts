@@ -1,21 +1,17 @@
 import type { Body, Command, Motion, Recoil, Vec } from '../components'
-import { HULL_RADIUS } from './hit'
+import { BD, BRAKE, COAST_LATERAL_SCALE, HULL_RADIUS, MOTION_SUBSTEP } from '../flight-config'
 import type { World } from '../engine/world'
 import { terrainImpact, type TerrainBox } from '../../dogfight/terrain'
 
-const COAST_LATERAL_SCALE = 0.2
-const BD_LATERAL_SCALE = 0.05
-const BD_MAX_THRUST_ANGLE = Math.PI / 3
-
 function bdThrustAngle(desired: number, velocity: Vec, drag: number, force: number, avoiding: boolean) {
   const speed = Math.hypot(velocity.x, velocity.y)
-  if (speed < 0.25 || force <= 0) return desired
+  if (speed < BD.minSteeringSpeed || force <= 0) return desired
   const course = Math.atan2(velocity.y, velocity.x)
   const error = Math.atan2(Math.sin(desired - course), Math.cos(desired - course))
   // Give the forward component enough force to offset drag where the thrust budget allows.
-  const forwardShare = Math.min(0.95, drag * speed ** 2 / force)
-  const turnLimit = avoiding ? Math.PI / 2 : Math.min(BD_MAX_THRUST_ANGLE, Math.acos(forwardShare))
-  return course + clamp(error * 1.6, -turnLimit, turnLimit)
+  const forwardShare = Math.min(BD.maxForwardShare, drag * speed ** 2 / force)
+  const turnLimit = avoiding ? BD.avoidanceMaxThrustAngle : Math.min(BD.maxThrustAngle, Math.acos(forwardShare))
+  return course + clamp(error * BD.courseGain, -turnLimit, turnLimit)
 }
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -64,7 +60,7 @@ export function integrateMotion(
   // Hull-relative quadratic drag: efficient forward travel, costly broadside slip.
   // Substeps keep drag and angular response stable at the fixed simulation tick.
   const velocity = { ...motion.velocity }
-  const steps = Math.ceil(dt / 0.01)
+  const steps = Math.ceil(dt / MOTION_SUBSTEP)
   const h = dt / steps
   const stepDuration = (command.step?.fraction ?? 0) * dt
   for (let i = 0; i < steps; i++) {
@@ -77,7 +73,7 @@ export function integrateMotion(
     const step = i * h < stepDuration - 1e-8 ? command.step : undefined
     const braking = command.brakeFraction !== undefined
     const power = step?.power ?? command.power
-    const lateralScale = command.bd ? BD_LATERAL_SCALE
+    const lateralScale = command.bd ? BD.lateralScale
       : power === 0 && !braking ? COAST_LATERAL_SCALE : 1
     const sideDrag = motion.drag + (motion.sideDrag - motion.drag) * lateralScale
     // Lateral stabilization removes sideways slip; it cannot add kinetic energy.
@@ -98,7 +94,7 @@ export function integrateMotion(
     }
     if (command.brakeFraction !== undefined) {
       const speed = Math.hypot(velocity.x, velocity.y)
-      const delta = (motion.thrust / motion.mass) * 1.5 * command.brakeFraction * h
+      const delta = (motion.thrust / motion.mass) * BRAKE.thrustMultiplier * command.brakeFraction * h
       const scale = speed > 0 ? Math.max(0, 1 - delta / speed) : 0
       velocity.x *= scale
       velocity.y *= scale

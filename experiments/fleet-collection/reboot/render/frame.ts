@@ -1,3 +1,4 @@
+import { BRAKE } from '../flight-config'
 import type { Camera } from '../../dogfight/camera'
 import type { Id, World } from '../engine/world'
 import { drawBuilding, drawTerrain, type Facade } from './city'
@@ -29,10 +30,10 @@ export function drawFrame(
   const previous = world.previous.get(id)
   if (!body || !motion || !ship || !previous) return
   const command = world.command.get(id)
-  const braking = command?.brakeFraction !== undefined && Math.hypot(motion.velocity.x, motion.velocity.y) > 0.05
+  const braking = command?.brakeFraction !== undefined && Math.hypot(motion.velocity.x, motion.velocity.y) > BRAKE.minSpeed
   const thrustAngle = command?.step?.angle ?? command?.appliedThrustAngle ?? body.heading
   const exhaustAngle = braking ? Math.atan2(motion.velocity.y, motion.velocity.x) : thrustAngle + Math.PI
-  const nozzlePower = braking ? 1.5 * command.brakeFraction! : command?.step?.power ?? command?.power ?? 0
+  const nozzlePower = braking ? BRAKE.thrustMultiplier * command.brakeFraction! : command?.step?.power ?? command?.power ?? 0
   // Sustain the attitude jets during a committed turn, even at steady angular speed.
   const recenterThrust = command?.recentering ? Math.sign(command.turn || body.turnRate) * 0.4 : 0
   const turnEffort = Math.abs(body.turnEffort) > 0.05 ? body.turnEffort : recenterThrust

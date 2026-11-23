@@ -1,6 +1,5 @@
 import type { Energy } from '../components'
-
-export const ENERGY = { capacity: 100, regen: 14, fullDrain: 18, brakeDrain: 24, unlockAt: 20 }
+import { ENERGY } from '../flight-config'
 
 export function spendEnergy(energy: Energy, amount: number) {
   energy.value = Math.max(0, energy.value - amount)

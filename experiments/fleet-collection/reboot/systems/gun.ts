@@ -1,7 +1,6 @@
 import { lockedTarget, type Id, type World } from '../engine/world'
 import type { Vec } from '../components'
 import { damageShip, projectileHit } from './hit'
-import { BARRAGES } from '../weapons'
 import { terrainImpact } from '../../dogfight/terrain'
 
 const wrap = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle))
@@ -66,7 +65,7 @@ export function gunSystem(world: World, dt: number, previous?: ReadonlyMap<Id, V
         drone.center - drone.arc,
         drone.center + drone.arc,
       )
-      const spec = BARRAGES[drone.weaponClass]
+      const spec = drone.barrage
       drone.cooldown = Math.max(0, drone.cooldown - dt)
       if (
         drone.wavesLeft === 0 &&

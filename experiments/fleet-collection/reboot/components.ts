@@ -51,7 +51,7 @@ export interface Input {
 
 export interface Pose { x: number; y: number; heading: number; vx: number; vy: number }
 
-export interface DroneGun extends Gun { weaponClass: import('./weapons').WeaponClass; cooldown: number; wavesLeft: number; waveTimer: number; name: string; center: number; side: -1 | 1; target: number; manualTarget?: number }
+export interface DroneGun extends Gun { barrage: import('./weapons').BarrageSpec; cooldown: number; wavesLeft: number; waveTimer: number; name: string; center: number; side: -1 | 1; target: number; manualTarget?: number }
 
 export interface Projectile { owner?: number; radius: number; x: number; y: number; vx: number; vy: number; life: number; weapon: number }
 

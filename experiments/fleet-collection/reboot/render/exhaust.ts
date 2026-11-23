@@ -1,3 +1,4 @@
+import { BRAKE } from '../flight-config'
 import { legJoints } from './humanoid'
 import { HEIGHT_PROJECTION } from '../../dogfight/projection'
 import type { Pose } from '../components'
@@ -43,10 +44,10 @@ export function drawExhaust(
     ships.set(id, trail)
   }
   const command = world.command.get(id)
-  const braking = command?.brakeFraction !== undefined && Math.hypot(pose.vx, pose.vy) > 0.05
+  const braking = command?.brakeFraction !== undefined && Math.hypot(pose.vx, pose.vy) > BRAKE.minSpeed
   const thrustAngle = command?.step?.angle ?? command?.appliedThrustAngle ?? pose.heading
   const angle = braking ? Math.atan2(pose.vy, pose.vx) : thrustAngle + Math.PI
-  const power = braking ? 1.5 * command.brakeFraction! : command?.step?.power ?? command?.power ?? 0
+  const power = braking ? BRAKE.thrustMultiplier * command.brakeFraction! : command?.step?.power ?? command?.power ?? 0
   const elapsed = Math.max(0, Math.min(0.15, time - trail.time))
   if (elapsed > 0) {
     const count = Math.ceil(elapsed / 0.015)

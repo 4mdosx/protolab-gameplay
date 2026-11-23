@@ -1,3 +1,4 @@
+import { HULL_RADIUS } from '../flight-config'
 import type { World, Id } from './world'
 import { terrainImpact } from '../../dogfight/terrain'
 
@@ -14,13 +15,13 @@ export function spawnDummy(world: World, near: Id): Id {
   for (let i = 0; i < 72; i++) {
     const angle = (i * Math.PI) / 36
     const candidate = { x: origin.x + Math.cos(angle) * 25, y: origin.y + Math.sin(angle) * 25 }
-    if (terrainImpact(origin, candidate, 'surface', world.city.buildings, 2) === null) {
+    if (terrainImpact(origin, candidate, 'surface', world.city.buildings, HULL_RADIUS) === null) {
       position = candidate
       break
     }
   }
   // Fall back to a clear stationary location if no direct firing lane exists.
-  if (terrainImpact(position, position, 'surface', world.city.buildings, 2) !== null)
+  if (terrainImpact(position, position, 'surface', world.city.buildings, HULL_RADIUS) !== null)
     position = { x: origin.x, y: origin.y + 6 }
   const id = world.nextId++
   world.ids.push(id)

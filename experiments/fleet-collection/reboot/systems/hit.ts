@@ -1,7 +1,7 @@
 import type { Vec, Projectile } from '../components'
 import type { World, Id } from '../engine/world'
 
-export const HULL_RADIUS = 2
+import { HULL_RADIUS } from '../flight-config'
 
 /** Sweep in relative coordinates when both the projectile and hull move. */
 export function projectileHit(

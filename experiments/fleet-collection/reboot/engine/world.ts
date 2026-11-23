@@ -1,3 +1,4 @@
+import { BARRAGES } from '../weapons'
 import type {
   Body,
   Command,
@@ -12,7 +13,7 @@ import type {
   Ship,
 } from '../components'
 import { dummyFireSystem, type TrainingDummy } from './dummy'
-import { HANDLING } from '../handling'
+import { ENERGY, HANDLING } from '../flight-config'
 import { SIM_STEP } from './clock'
 import { controlSystem } from '../systems/control'
 import { motionSystem } from '../systems/motion'
@@ -76,7 +77,7 @@ export function stepWorld(world: World, dt = SIM_STEP) {
   gunSystem(world, dt, world.previous)
   dummyFireSystem(world, dt)
   citySystem(world)
-  world.time = Math.round((world.time + dt) * 10) / 10
+  world.time = Number((world.time + dt).toFixed(10))
 }
 
 export function createWorld(mapSeed = 17): World {
@@ -103,12 +104,12 @@ export function createWorld(mapSeed = 17): World {
   world.ids.push(id)
   world.ship.set(id, { name: hull.name, hp: 100 })
   world.body.set(id, { x: 15, y: 25, heading: 0, turnRate: 0, turnEffort: 0 })
-  world.energy.set(id, { value: 100, locked: false })
+  world.energy.set(id, { value: ENERGY.capacity, locked: false })
   world.motion.set(id, { velocity: { x: 0, y: 0 }, ...HANDLING.cruiser })
   world.drones.set(
     id,
-    ([-1, 1] as const).map((side) => ({
-      weaponClass: 'cruiser',
+    ([-1, 1] as const).map((side, index) => ({
+      barrage: BARRAGES.cruiser[index],
       cooldown: 0,
       wavesLeft: 0,
       waveTimer: 0,

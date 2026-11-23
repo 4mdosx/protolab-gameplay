@@ -116,8 +116,29 @@ describe('reboot destroyer', () => {
     expect(world.command.get(id)!.thrustAngle).not.toBe(angle)
   })
 
+  it('fires destroyer salvos as three single rounds from each mount in its own direction', () => {
+    const world = createWorld(17)
+    world.city.buildings = []
+    const id = manualShip(world)!
+    applyHandling(world, id, 'destroyer')
+    const [left, right] = world.drones.get(id)!
+    left.local = left.target = -Math.PI / 6
+    right.local = right.target = Math.PI / 6
+    world.input.fireQueue = [0]
+
+    for (let tick = 0; tick < 6; tick++) {
+      gunSystem(world, SIM_STEP)
+      const waves = tick >= 5 ? 3 : tick >= 3 ? 2 : 1
+      for (const [index, mount] of [left, right].entries()) {
+        const shots = world.projectiles.filter(shot => shot.weapon === index + 1)
+        expect(shots).toHaveLength(waves)
+        for (const shot of shots) expect(Math.atan2(shot.vy, shot.vx)).toBeCloseTo(mount.local)
+      }
+    }
+  })
+
   it('fires class barrages with independent reload and larger battleship hitboxes', () => {
-    for (const [profile, total, radius] of [['destroyer', 4, .45], ['cruiser', 6, .65], ['battleship', 9, 1]] as const) {
+    for (const [profile, total, radius] of [['destroyer', 3, .45], ['cruiser', 3, .65], ['battleship', 6, 1]] as const) {
       const world = createWorld(17)
       world.city.buildings = []
       const id = manualShip(world)!
@@ -134,15 +155,35 @@ describe('reboot destroyer', () => {
       stepWorld(world)
       expect(world.projectiles.length).toBeGreaterThan(total)
       if (profile === 'battleship') {
-        const angles = world.projectiles.slice(0, 3).map(shot => Math.atan2(shot.vy, shot.vx))
-        expect(angles[0]).toBeLessThan(angles[1]); expect(angles[1]).toBeLessThan(angles[2])
+        const angles = world.projectiles.slice(0, 2).map(shot => Math.atan2(shot.vy, shot.vx))
+        expect(angles[1] - angles[0]).toBeCloseTo(Math.PI / 9)
       }
     }
     const world = createWorld(17)
     world.city.buildings = []
     world.input.fireQueue = [0]
     stepWorld(world)
-    expect(world.projectiles.map(shot => shot.weapon)).toEqual([1, 1, 2, 2])
+    expect(world.projectiles.map(shot => shot.weapon)).toEqual([1, 2])
+  })
+
+  it('splits cruiser and battleship full salvos across the two barrel directions', () => {
+    for (const [profile, primaryPerWave] of [['cruiser', 1], ['battleship', 2]] as const) {
+      const world = createWorld(17)
+      world.city.buildings = []
+      const id = manualShip(world)!
+      applyHandling(world, id, profile)
+      const [primary, secondary] = world.drones.get(id)!
+      primary.local = primary.target = -Math.PI / 6
+      secondary.local = secondary.target = Math.PI / 6
+      world.input.fireQueue = [0]
+      for (let tick = 0; tick < 10; tick++) gunSystem(world, SIM_STEP)
+      const primaryShots = world.projectiles.filter(shot => shot.weapon === 1)
+      const secondaryShots = world.projectiles.filter(shot => shot.weapon === 2)
+      expect(primaryShots).toHaveLength(primaryPerWave * 3)
+      expect(secondaryShots).toHaveLength(3)
+      expect(primaryShots.every(shot => shot.vy < 0)).toBe(true)
+      for (const shot of secondaryShots) expect(Math.atan2(shot.vy, shot.vx)).toBeCloseTo(secondary.local)
+    }
   })
 
   it('adds bounded lateral grip without generating energy in neutral', () => {

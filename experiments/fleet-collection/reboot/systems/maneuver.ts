@@ -1,26 +1,15 @@
 import type { Command, StepDirection, Vec } from '../components'
 import type { Id, World } from '../engine/world'
 import { terrainImpact } from '../../dogfight/terrain'
-import { HULL_RADIUS, projectileHit } from './hit'
+import { projectileHit } from './hit'
+import { BD, HULL_RADIUS, STEP, STEP_ANGLE } from '../flight-config'
 import { integrateMotion } from './motion'
-
-export const STEP = { cost: 32, duration: 0.25, power: 4.5 }
-
-const PREDICTION_TICKS = 8
-const MIN_COURSE_CHANGE = 0.15
-// Projection keeps world X/Y aligned with screen right/down.
-const STEP_ANGLE: Record<StepDirection, number> = {
-  up: -Math.PI / 2, left: Math.PI, down: Math.PI / 2, right: 0,
-}
-
-const BD_LOOKAHEAD = 2.2
-const BD_AVOIDANCE_OFFSETS = [20, -20, 40, -40, 60, -60, 90, -90, 120, -120, 150, -150]
 
 /** Prefer a clear turn. Brake if turning alone cannot clear the predicted obstacle. */
 export function avoidBDObstacle(world: World, id: Id, command: Command, dt: number, brakeFraction: number) {
   const body = world.body.get(id)!
   const motion = world.motion.get(id)!
-  const ticks = Math.ceil(BD_LOOKAHEAD / dt)
+  const ticks = Math.ceil(BD.lookahead / dt)
   const clearTicks = (candidate: Command) => {
     const pose = { ...body }
     const movement = { ...motion }
@@ -36,7 +25,7 @@ export function avoidBDObstacle(world: World, id: Id, command: Command, dt: numb
   if (room === ticks) return
 
   const previous = world.command.get(id)
-  const alternatives = BD_AVOIDANCE_OFFSETS.map(offset => command.thrustAngle + offset * Math.PI / 180)
+  const alternatives = BD.avoidanceOffsets.map(offset => command.thrustAngle + offset)
   if (previous?.avoidingObstacle && previous.brakeFraction === undefined) {
     alternatives.unshift(previous.thrustAngle)
   }
@@ -50,7 +39,7 @@ export function avoidBDObstacle(world: World, id: Id, command: Command, dt: numb
     if (room === ticks) break
   }
 
-  if (room < ticks && brakeFraction > 0 && Math.hypot(motion.velocity.x, motion.velocity.y) > 0.5) {
+  if (room < ticks && brakeFraction > 0 && Math.hypot(motion.velocity.x, motion.velocity.y) > BD.minAvoidanceBrakeSpeed) {
     const braking = { ...command, power: 0, brakeFraction, avoidingObstacle: true }
     if (clearTicks(braking) >= room) best = braking
   }
@@ -67,7 +56,7 @@ interface PredictedRound {
 }
 
 function predictRounds(world: World, id: Id, dt: number): PredictedRound[][] {
-  const ticks: PredictedRound[][] = Array.from({ length: PREDICTION_TICKS }, () => [])
+  const ticks: PredictedRound[][] = Array.from({ length: STEP.predictionTicks }, () => [])
   for (const [index, shot] of world.projectiles.entries()) {
     if (shot.owner === id || shot.life <= 0) continue
     let from: Vec = shot
@@ -141,16 +130,15 @@ export function chooseStep(
   const directionX = Math.cos(preferredAngle)
   const directionY = Math.sin(preferredAngle)
   // Search the selected screen side only. Straight ahead wins equivalent routes.
-  const offsets = [0, Math.PI / 12, -Math.PI / 12, Math.PI / 6, -Math.PI / 6]
   let best: { angle: number; hits: number; clearance: number } | undefined
-  for (const offset of offsets) {
+  for (const offset of STEP.offsets) {
     const angle = preferredAngle + offset
     const candidate = estimate(manual, angle)
     const dx = candidate.burstEnd.x - baseline.x
     const dy = candidate.burstEnd.y - baseline.y
-    if (dx * directionX + dy * directionY < MIN_COURSE_CHANGE) continue
+    if (dx * directionX + dy * directionY < STEP.minCourseChange) continue
     const saferTie = best && candidate.hits === best.hits && (incoming || candidate.hits > 0)
-      && candidate.clearance > best.clearance + 0.01
+      && candidate.clearance > best.clearance + STEP.clearanceTieBreak
     if (!best || candidate.hits < best.hits || saferTie) {
       best = { angle, hits: candidate.hits, clearance: candidate.clearance }
     }
