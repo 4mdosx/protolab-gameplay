@@ -1,3 +1,6 @@
+import { createBindings } from '../experiments/fleet-collection/reboot/bindings'
+import { createPilotInput } from '../experiments/fleet-collection/reboot/pilot-input'
+import { pointerThrustAngle } from '../experiments/fleet-collection/reboot/systems/control'
 import { spawnDummy, resetDummy } from '../experiments/fleet-collection/reboot/engine/dummy'
 import { cameraScaleForSpeed, followCamera, screenToWorld, worldToScreen } from '../experiments/fleet-collection/reboot/render/view'
 import { gunSystem } from '../experiments/fleet-collection/reboot/systems/gun'
@@ -32,7 +35,7 @@ describe('reboot destroyer', () => {
     const world = createWorld(17)
     const id = manualShip(world)!
     const body = world.body.get(id)!
-    world.input = { reverseControl: true, turn: 0, throttle: 3, aim: { x: body.x + 40, y: body.y } }
+    world.input = { reverseControl: true, turn: 0, throttle: 2, boostHeld: true, aim: { x: body.x + 40, y: body.y } }
     stepWorld(world)
     const motion = world.motion.get(id)!
     expect(motion.velocity.x).toBeGreaterThan(1)
@@ -45,7 +48,7 @@ describe('reboot destroyer', () => {
     world.city.buildings = []
     const id = manualShip(world)!
     const body = world.body.get(id)!
-    world.input = { reverseControl: false, turn: 0, throttle: 3, aim: { x: body.x + 100, y: body.y } }
+    world.input = { reverseControl: false, turn: 0, throttle: 2, boostHeld: true, aim: { x: body.x + 100, y: body.y } }
     stepWorld(world)
     expect(world.motion.get(id)!.velocity.x).toBeLessThan(0)
     world.motion.get(id)!.velocity = { x: 0, y: 0 }
@@ -60,7 +63,7 @@ describe('reboot destroyer', () => {
     world.city.buildings = []
     const id = manualShip(world)!
     const body = world.body.get(id)!
-    world.input = { reverseControl: true, turn: 1, throttle: 3, aim: { x: body.x + 1000, y: body.y } }
+    world.input = { reverseControl: true, turn: 1, throttle: 2, boostHeld: true, aim: { x: body.x + 1000, y: body.y } }
     for (let i = 0; i < 10; i++) stepWorld(world)
     expect(body.heading).toBeGreaterThan(0.4)
     expect(world.motion.get(id)!.velocity.x).toBeGreaterThan(0)
@@ -74,7 +77,7 @@ describe('reboot destroyer', () => {
     const world = createWorld(17)
     const id = manualShip(world)!
     const body = world.body.get(id)!
-    world.input = { selectedGun: 1, reverseControl: false, turn: 0, throttle: 0, aim: { x: body.x - 100, y: body.y - 4.5 } }
+    world.input = { selectedGun: 1, reverseControl: false, turn: 0, throttle: 1, aim: { x: body.x - 100, y: body.y - 4.5 } }
     stepWorld(world)
     const [first, second] = world.drones.get(id)!
     expect(Math.abs(first.local)).toBeCloseTo(first.traverse * SIM_STEP)
@@ -162,12 +165,13 @@ describe('reboot destroyer', () => {
     world.city.buildings = []
     const id = manualShip(world)!
     const motion = world.motion.get(id)!
-    world.input = { reverseControl: true, turn: 1, throttle: 3, aim: { x: 1000, y: 25 } }
+    world.input = { reverseControl: true, turn: 1, throttle: 2, boostHeld: true, aim: { x: 1000, y: 25 } }
     stepWorld(world)
     expect(world.body.get(id)!.turnEffort).toBeGreaterThan(0)
     motion.velocity = { x: 30, y: 0 }
     world.input.turn = 0
     world.input.throttle = 1
+    world.input.boostHeld = false
     stepWorld(world)
     expect(world.command.get(id)!.power).toBe(0.1)
     expect(Math.hypot(motion.velocity.x, motion.velocity.y)).toBeGreaterThan(20)
@@ -184,7 +188,7 @@ describe('reboot destroyer', () => {
       applyHandling(world, id, profile)
       expect(world.motion.get(id)!.velocity.x).toBe(1)
       expect(world.body.get(id)!.x).toBe(x)
-      world.input = { reverseControl: true, turn: 1, throttle: 3, aim: { x: 1000, y: 25 } }
+      world.input = { reverseControl: true, turn: 1, throttle: 2, boostHeld: true, aim: { x: 1000, y: 25 } }
       stepWorld(world)
       return { speed: world.motion.get(id)!.velocity.x, yaw: world.body.get(id)!.turnRate }
     }
@@ -244,7 +248,7 @@ describe('reboot destroyer', () => {
     const id = manualShip(world)!
     world.motion.get(id)!.velocity = { x: 5, y: 0 }
     world.input.brake = true
-    world.input.throttle = 3
+    world.input.throttle = 2
     stepWorld(world)
     expect(world.energy.get(id)!.value).toBeLessThan(100)
     for (let i = 0; i < 10; i++) stepWorld(world)
@@ -252,35 +256,41 @@ describe('reboot destroyer', () => {
     expect(world.motion.get(id)!.velocity.y).toBeCloseTo(0)
   })
 
-  it('charges dash once, respects cooldown and falls back from full thrust when depleted', () => {
+  it('uses the full-thrust drain on every held tick and restores the selected gear on release', () => {
     const world = createWorld(17)
     world.city.buildings = []
     const id = manualShip(world)!
     const energy = world.energy.get(id)!
-    world.input = { reverseControl: true, turn: 0, throttle: 0, dashRequested: true, aim: { x: 1000, y: 25 } }
-    stepWorld(world)
-    expect(energy.value).toBe(75)
-    expect(world.motion.get(id)!.velocity.x).toBeGreaterThan(4)
-    world.input.dashRequested = true
-    stepWorld(world)
-    expect(energy.value).toBe(75)
-    expect(world.input.dashRequested).toBe(false)
+    world.input = { reverseControl: true, turn: 0, throttle: 1, boostHeld: true, aim: { x: 1000, y: 25 } }
     for (let i = 0; i < 5; i++) stepWorld(world)
-    expect(energy.dashLeft).toBe(0)
-    expect(energy.value).toBeGreaterThan(75)
-    energy.value = 0; energy.locked = true
-    world.input.throttle = 3
+    expect(energy.value).toBeCloseTo(100 - 18 * 0.5)
+    expect(world.command.get(id)!.power).toBe(1)
+    const speed = world.motion.get(id)!.velocity.x
+    world.input.boostHeld = false
     stepWorld(world)
-    expect(world.command.get(id)!.power).toBe(0.35)
-    expect(energy.value).toBeGreaterThan(0)
-    world.input.brake = true
-    world.input.dashRequested = true
-    stepWorld(world)
-    expect(world.command.get(id)!.braking).toBe(false)
-    expect(energy.dashLeft).toBe(0)
+    expect(world.command.get(id)!.power).toBe(0.1)
+    expect(world.motion.get(id)!.velocity.x).toBeGreaterThan(speed * 0.9)
+    expect(energy.value).toBeGreaterThan(91)
   })
 
-  it('uses physical thrust for every hull and keeps dash vulnerable to gunfire', () => {
+  it('requires a fresh boost press after depletion', () => {
+    const world = createWorld(17)
+    world.city.buildings = []
+    const id = manualShip(world)!
+    const energy = world.energy.get(id)!
+    energy.value = 1
+    world.input = { reverseControl: true, turn: 0, throttle: 2, boostHeld: true, aim: { x: 1000, y: 25 } }
+    stepWorld(world)
+    expect(energy.value).toBe(0)
+    for (let i = 0; i < 25; i++) stepWorld(world)
+    expect(energy.locked).toBe(false)
+    expect(world.command.get(id)!.power).toBe(0.35)
+    world.input.boostPressed = true
+    stepWorld(world)
+    expect(world.command.get(id)!.power).toBe(1)
+  })
+
+  it('uses physical full thrust for every hull and remains vulnerable to gunfire', () => {
     for (const hull of ['destroyer', 'cruiser', 'battleship'] as const) {
       const world = createWorld(17)
       world.city.buildings = []
@@ -290,16 +300,16 @@ describe('reboot destroyer', () => {
       const start = body.x
       const motion = world.motion.get(id)!
       world.projectiles.push({ x: start + 1, y: body.y, vx: 0, vy: 0, radius: .1, life: 3, weapon: 1 })
-      world.input = { reverseControl: true, turn: 0, throttle: 0, dashRequested: true, aim: { x: start + 100, y: body.y } }
+      world.input = { reverseControl: true, turn: 0, throttle: 1, boostHeld: true, aim: { x: start + 100, y: body.y } }
       stepWorld(world)
       expect(body.x).toBeGreaterThan(start)
-      expect(body.x - start).toBeLessThanOrEqual(motion.thrust / motion.mass * 2.5 * SIM_STEP ** 2)
-      expect(world.energy.get(id)!.value).toBe(75)
+      expect(body.x - start).toBeLessThanOrEqual(motion.thrust / motion.mass * SIM_STEP ** 2)
+      expect(world.energy.get(id)!.value).toBeCloseTo(98.2)
       expect(world.ship.get(id)!.hp).toBeLessThan(100)
     }
   })
 
-  it('tracks a live target while keeping propulsion and firing under player control', () => {
+  it('tracks the preselected target only during BD and keeps firing under player control', () => {
     const world = createWorld(17)
     world.city.buildings = []
     const id = manualShip(world)!
@@ -311,8 +321,12 @@ describe('reboot destroyer', () => {
       selectedGun: 1, aim: { x: body.x - 20, y: body.y },
     }
     stepWorld(world)
+    expect(body.heading).toBe(0)
+    expect(world.drones.get(id)![1].target).toBe(0)
+    world.input.boostHeld = true
+    stepWorld(world)
     expect(body.heading).toBeGreaterThan(0)
-    expect(world.command.get(id)!.thrustAngle).toBeCloseTo(Math.PI)
+    expect(Math.abs(world.command.get(id)!.thrustAngle)).toBeCloseTo(Math.PI)
     expect(world.drones.get(id)!.every(gun => gun.target > 0)).toBe(true)
     expect(world.projectiles).toHaveLength(0)
     world.ship.get(target)!.hp = 0
@@ -345,7 +359,7 @@ describe('reboot destroyer', () => {
     body.x = tower!.x - 3
     body.y = tower!.y + tower!.height / 2
     body.heading = 0
-    world.input = { reverseControl: true, turn: 0, throttle: 3, aim: { x: body.x + 100, y: body.y } }
+    world.input = { reverseControl: true, turn: 0, throttle: 2, boostHeld: true, aim: { x: body.x + 100, y: body.y } }
     for (let i = 0; i < 30; i++) stepWorld(world)
     expect(body.x).toBeLessThan(tower!.x - 1.5)
   })
@@ -385,7 +399,7 @@ describe('enemy training target', () => {
     const body = world.body.get(target)!
     const start = { x: body.x, y: body.y }
     world.projectiles.push({ owner: player, x: body.x - 4, y: body.y, vx: 50, vy: 0, radius: .45, life: 2, weapon: 1 })
-    world.input.turn = 1; world.input.throttle = 3
+    world.input.turn = 1; world.input.throttle = 2
     stepWorld(world)
     expect(world.ship.get(target)!.hp).toBeLessThan(100)
     expect(body.x).toBe(start.x); expect(body.y).toBe(start.y)
@@ -393,5 +407,401 @@ describe('enemy training target', () => {
     resetDummy(world, target)
     expect(world.ship.get(target)!.hp).toBe(100)
     expect(world.projectiles).toHaveLength(0)
+  })
+})
+
+
+describe('assisted maneuvers', () => {
+  function scenario() {
+    const world = createWorld(17)
+    world.city.buildings = []
+    const player = manualShip(world)!
+    const dummy = spawnDummy(world, player)
+    return { world, player, dummy, body: world.body.get(player)!, energy: world.energy.get(player)! }
+  }
+
+  it('fires repeatedly while enabled and stops launching when switched off', () => {
+    const { world, player, dummy } = scenario()
+    const turret = world.trainingDummies.get(dummy)!
+    stepWorld(world)
+    expect(world.projectiles).toHaveLength(0)
+    turret.firing = true
+    stepWorld(world)
+    expect(world.projectiles[0].owner).toBe(dummy)
+    for (let i = 0; i < 31; i++) stepWorld(world)
+    expect(world.ship.get(player)!.hp).toBe(80)
+    turret.firing = false
+    for (let i = 0; i < 30; i++) stepWorld(world)
+    expect(world.ship.get(player)!.hp).toBe(80)
+    expect(world.projectiles).toHaveLength(0)
+  })
+
+  it('steers a fast locked turn along an arc without discarding momentum', () => {
+    const { world, player, dummy, body } = scenario()
+    const motion = world.motion.get(player)!
+    motion.velocity = { x: 25, y: 0 }
+    world.input.lockTarget = dummy
+    world.input.boostHeld = true
+    world.input.aim = { x: body.x - 10, y: body.y + 40 }
+    stepWorld(world)
+    expect(world.command.get(player)!.bd).toBe(true)
+    expect(motion.velocity.x).toBeGreaterThan(20)
+    expect(motion.velocity.y).toBeGreaterThan(0)
+    for (let i = 0; i < 8; i++) stepWorld(world)
+    expect(motion.velocity.y).toBeGreaterThan(8)
+    expect(Math.hypot(motion.velocity.x, motion.velocity.y)).toBeGreaterThan(24)
+  })
+
+  it('uses the last manual thrust direction in weapon mode and restores it after BD', () => {
+    const { world, player, dummy, body } = scenario()
+    world.input.aim = { x: body.x + 30, y: body.y }
+    stepWorld(world)
+    world.input.aim = { x: body.x, y: body.y + 40 }
+    world.input.selectedGun = 1
+    world.input.boostHeld = true
+    stepWorld(world)
+    expect(world.command.get(player)!.thrustAngle).toBe(0)
+    world.input.lockTarget = dummy
+    stepWorld(world)
+    expect(world.command.get(player)!.thrustAngle).toBeGreaterThan(1)
+    world.input.boostHeld = false
+    stepWorld(world)
+    expect(world.command.get(player)!.thrustAngle).toBe(0)
+    expect(world.command.get(player)!.bd).toBeFalsy()
+  })
+
+  it('brakes and starts a one-shot recenter, preserving preselection while interrupting boost', () => {
+    const { world, player, dummy, body } = scenario()
+    world.input.lockTarget = dummy
+    world.input.boostHeld = true
+    world.input.aim = { x: body.x, y: body.y + 40 }
+    world.motion.get(player)!.velocity = { x: 10, y: 0 }
+    world.input.brake = true
+    stepWorld(world)
+    expect(world.pilot.get(player)!.recenterAngle).toBeUndefined()
+    body.heading = Math.PI / 2
+    body.turnRate = 0.5
+    world.input.recenterHeading = body.heading
+    stepWorld(world)
+    expect(world.command.get(player)!.brakeFraction).toBe(1)
+    expect(world.command.get(player)!.bd).toBeFalsy()
+    expect(world.motion.get(player)!.velocity.x).toBeLessThan(10)
+    world.input.brake = false
+    world.input.aim = { x: body.x + 30, y: body.y }
+    stepWorld(world)
+    expect(world.command.get(player)!.brakeFraction).toBeUndefined()
+    expect(world.command.get(player)!.fullThrust).toBeFalsy()
+    expect(world.pilot.get(player)!.recenterAngle).toBeCloseTo(Math.PI / 2)
+    expect(world.input.lockTarget).toBe(dummy)
+    world.input.turn = -1
+    stepWorld(world)
+    expect(world.pilot.get(player)!.recenterAngle).toBeCloseTo(Math.PI / 2)
+    expect(world.command.get(player)!.recentering).toBe(true)
+    for (let i = 0; i < 60 && world.pilot.get(player)!.recenterAngle !== undefined; i++) stepWorld(world)
+    expect(world.pilot.get(player)!.recenterAngle).toBeUndefined()
+    expect(world.command.get(player)!.recentering).toBe(false)
+    expect(body.heading).toBeCloseTo(Math.PI / 2, 1)
+  })
+
+  it('uses the R keydown snapshot in weapon mode and replaces it on the next tap', () => {
+    const { world, player, body } = scenario()
+    world.input.selectedGun = 1
+    world.input.aim = { x: body.x + 30, y: body.y }
+    body.heading = Math.PI / 2
+    body.turnRate = 0.5
+    world.input.recenterHeading = body.heading
+    stepWorld(world)
+    expect(world.pilot.get(player)!.recenterAngle).toBeCloseTo(Math.PI / 2)
+    expect(world.command.get(player)!.thrustAngle).toBe(0)
+    expect(world.command.get(player)!.brakeFraction).toBeUndefined()
+    expect(world.command.get(player)!.power).toBe(0.1)
+    const replacement = body.heading
+    world.input.recenterHeading = replacement
+    stepWorld(world)
+    expect(world.pilot.get(player)!.recenterAngle).toBeCloseTo(replacement)
+  })
+
+  it('turns a stationary hull toward the mouse angle captured on keydown', () => {
+    const { world, player, body } = scenario()
+    const aim = { x: body.x, y: body.y + 30 }
+    expect(pointerThrustAngle(body, aim, false)).toBeCloseTo(3 * Math.PI / 2)
+    world.input.recenterHeading = pointerThrustAngle(body, aim, true)
+    world.input.aim = { x: body.x + 30, y: body.y }
+    stepWorld(world)
+    expect(world.command.get(player)!.recentering).toBe(true)
+    expect(body.heading).toBeGreaterThan(0)
+    for (let i = 0; i < 60; i++) stepWorld(world)
+    expect(body.heading).toBeCloseTo(Math.PI / 2, 1)
+    expect(world.pilot.get(player)!.recenterAngle).toBeUndefined()
+  })
+
+  it('holds the clicked course through locked BD without disturbing tracking or speed', () => {
+    const { world, player, dummy, body, energy } = scenario()
+    const motion = world.motion.get(player)!
+    motion.velocity = { x: 25, y: 0 }
+    world.input.lockTarget = dummy
+    world.input.boostHeld = true
+    world.input.aim = { x: body.x + 40, y: body.y }
+    stepWorld(world)
+    world.input.recenterHeading = Math.PI / 2
+    world.input.aim = { x: body.x - 40, y: body.y }
+    stepWorld(world)
+    expect(world.command.get(player)?.bd).toBe(true)
+    expect(world.command.get(player)?.thrustAngle).toBeCloseTo(Math.PI / 2)
+    expect(world.pilot.get(player)?.recenterAngle).toBeUndefined()
+    expect(world.drones.get(player)!.every(gun => gun.manualTarget !== undefined)).toBe(true)
+    expect(energy.value).toBeCloseTo(96.4)
+    for (let i = 0; i < 6; i++) stepWorld(world)
+    expect(world.command.get(player)?.thrustAngle).toBeCloseTo(Math.PI / 2)
+    expect(motion.velocity.y).toBeGreaterThan(0)
+    expect(Math.hypot(motion.velocity.x, motion.velocity.y)).toBeGreaterThan(24)
+
+    world.input.recenterHeading = 0
+    stepWorld(world)
+    expect(world.command.get(player)?.thrustAngle).toBe(0)
+    expect(world.command.get(player)?.bd).toBe(true)
+
+    world.input.stepDirection = 'right'
+    stepWorld(world)
+    expect(world.command.get(player)?.step).toBeDefined()
+    expect(world.pilot.get(player)?.bdCourse).toBeUndefined()
+  })
+
+  it('steers locked BD around an obstacle unless the player supplies a course snapshot', () => {
+    const { world, player, dummy, body } = scenario()
+    world.motion.get(player)!.velocity = { x: 22, y: 0 }
+    world.city.buildings = [{
+      id: 'bd-tower', x: body.x + 25, y: body.y - 3, width: 4, height: 6,
+      blocks: ['surface'], kind: 'tower',
+    }]
+    world.input.aim = { x: body.x + 80, y: body.y }
+    world.input.lockTarget = dummy
+    world.input.boostHeld = true
+    stepWorld(world)
+    expect(world.command.get(player)?.avoidingObstacle).toBe(true)
+    expect(Math.abs(world.command.get(player)!.thrustAngle)).toBeGreaterThan(0)
+    world.input.recenterHeading = 0
+    stepWorld(world)
+    expect(world.command.get(player)?.bd).toBe(true)
+    expect(world.command.get(player)?.avoidingObstacle).toBeUndefined()
+    expect(world.command.get(player)?.thrustAngle).toBe(0)
+    world.input.boostHeld = false
+    stepWorld(world)
+    world.input.boostHeld = true
+    world.input.boostPressed = true
+    const farEdge = world.city.buildings[0].x + world.city.buildings[0].width
+    for (let i = 0; i < 16; i++) stepWorld(world)
+    expect(body.x).toBeGreaterThan(farEdge)
+    expect(world.motion.get(player)!.velocity.x).toBeGreaterThan(10)
+  })
+
+  it('brakes a locked BD before a wide wall when steering alone cannot clear it', () => {
+    const { world, player, dummy, body, energy } = scenario()
+    const motion = world.motion.get(player)!
+    motion.velocity = { x: 18, y: 0 }
+    const wallX = body.x + 11
+    world.city.buildings = [{
+      id: 'bd-wide-wall', x: wallX, y: body.y - 50, width: 10, height: 100,
+      blocks: ['surface'], kind: 'tower',
+    }]
+    world.input.aim = { x: body.x + 80, y: body.y }
+    world.input.lockTarget = dummy
+    world.input.boostHeld = true
+    stepWorld(world)
+    expect(world.command.get(player)?.bd).toBe(true)
+    expect(world.command.get(player)?.brakeFraction).toBeGreaterThan(0)
+    expect(motion.velocity.x).toBeLessThan(18)
+    expect(energy.value).toBeCloseTo(97.6)
+    for (let i = 0; i < 7; i++) stepWorld(world)
+    expect(body.x).toBeLessThan(wallX - 2.5)
+  })
+
+  it('clears a recenter snapshot on locked boost', () => {
+    const { world, player, dummy, body } = scenario()
+    world.input.lockTarget = dummy
+    body.turnRate = 0.5
+    world.input.recenterHeading = body.heading
+    stepWorld(world)
+    expect(world.command.get(player)!.recentering).toBe(true)
+    world.input.boostHeld = true
+    world.input.boostPressed = true
+    stepWorld(world)
+    expect(world.command.get(player)!.bd).toBe(true)
+    expect(world.command.get(player)!.recentering).toBe(false)
+    expect(world.pilot.get(player)!.recenterAngle).toBeUndefined()
+  })
+
+  it('preserves the hull snapshot during Step, including when Step is unaffordable', () => {
+    for (const energyBeforeStep of [100, 1]) {
+      const { world, player, body, energy } = scenario()
+      body.heading = 0.6
+      body.turnRate = 0.5
+      world.input.recenterHeading = body.heading
+      stepWorld(world)
+      energy.value = energyBeforeStep
+      world.input.stepDirection = 'down'
+      stepWorld(world)
+      const command = world.command.get(player)!
+      expect(!!command.step).toBe(energyBeforeStep === 100)
+      expect(command.recentering).toBe(true)
+      expect(world.pilot.get(player)!.recenterAngle).toBe(0.6)
+    }
+  })
+
+  it('preserves the hull snapshot through unlocked full thrust', () => {
+    const { world, player, body } = scenario()
+    body.heading = 0.6
+    body.turnRate = 0.5
+    world.input.recenterHeading = body.heading
+    world.input.aim = { x: body.x + 80, y: body.y }
+    stepWorld(world)
+    world.input.boostHeld = true
+    world.input.boostPressed = true
+    stepWorld(world)
+    expect(world.command.get(player)!.fullThrust).toBe(true)
+    expect(world.command.get(player)!.recentering).toBe(true)
+    expect(world.pilot.get(player)!.recenterAngle).toBe(0.6)
+  })
+
+  it('spends Step energy only for a course change and physically avoids an incoming round', () => {
+    function run(step: boolean) {
+      const { world, player, dummy, body, energy } = scenario()
+      world.motion.get(player)!.velocity = { x: 6, y: 0 }
+      world.projectiles.push({ owner: dummy, x: body.x + 18, y: body.y, vx: -34, vy: 0, radius: .45, life: 3, weapon: 1 })
+      world.input.stepDirection = step ? 'down' : undefined
+      stepWorld(world)
+      expect(energy.value).toBe(step ? 68 : 100)
+      if (step) expect(energy.step).toBeDefined()
+      for (let i = 0; i < 8; i++) stepWorld(world)
+      return world.ship.get(player)!.hp
+    }
+    expect(run(false)).toBe(90)
+    expect(run(true)).toBe(100)
+  })
+
+  it('preserves BD on an unaffordable Step and requires a new boost press after a paid Step', () => {
+    const { world, player, dummy, body, energy } = scenario()
+    world.input.lockTarget = dummy
+    world.input.boostHeld = true
+    world.input.aim = { x: body.x + 80, y: body.y }
+    stepWorld(world)
+    energy.value = 20
+    world.input.stepDirection = 'down'
+    stepWorld(world)
+    expect(energy.value).toBeCloseTo(18.2)
+    expect(world.command.get(player)!.bd).toBe(true)
+    expect(energy.feedback).toContain('能量不足')
+
+    energy.value = 75
+    world.input.stepDirection = 'down'
+    stepWorld(world)
+    expect(energy.step).toBeDefined()
+    expect(world.command.get(player)!.bd).toBeFalsy()
+    expect(energy.value).toBe(43)
+    for (let i = 0; i < 4; i++) stepWorld(world)
+    expect(world.command.get(player)!.bd).toBeFalsy()
+    world.input.boostPressed = true
+    stepWorld(world)
+    expect(world.command.get(player)!.bd).toBe(true)
+  })
+
+  it('short-pushes toward the selected screen direction regardless of hull heading or aim', () => {
+    const { world, player, body, energy } = scenario()
+    body.heading = Math.PI / 3
+    world.input.aim = { x: body.x + 80, y: body.y }
+    world.input.stepDirection = 'down'
+    stepWorld(world)
+    expect(energy.step?.angle).toBeCloseTo(Math.PI / 2)
+    expect(energy.value).toBe(68)
+    expect(world.motion.get(player)!.velocity.y).toBeGreaterThan(5)
+  })
+
+  it('still chooses a feasible Step when every course risks a hit', () => {
+    const { world, dummy, body, energy } = scenario()
+    world.projectiles.push({ owner: dummy, x: body.x, y: body.y, vx: 10, vy: 0, radius: .45, life: 3, weapon: 1 })
+    world.input.stepDirection = 'down'
+    stepWorld(world)
+    expect(energy.step).toBeDefined()
+    expect(energy.value).toBe(68)
+  })
+
+  it('rejects a blocked left Step even when the right side is open', () => {
+    const { world, body, energy } = scenario()
+    world.city.buildings = [{
+      id: 'left-wall', x: body.x - 12.1, y: body.y - 30, width: 10, height: 60,
+      blocks: ['surface'], kind: 'tower',
+    }]
+    world.input.stepDirection = 'left'
+    stepWorld(world)
+    expect(energy.step).toBeUndefined()
+    expect(energy.value).toBe(100)
+    world.input.stepDirection = 'right'
+    stepWorld(world)
+    expect(energy.step?.angle).toBeCloseTo(0)
+    expect(energy.value).toBe(68)
+  })
+
+  it('reports no maneuvering room and keeps the energy when the hull is trapped', () => {
+    const { world, body, energy } = scenario()
+    world.city.buildings = [{
+      id: 'enclosure', x: body.x - 20, y: body.y - 20, width: 40, height: 40,
+      blocks: ['surface'], kind: 'tower',
+    }]
+    world.input.stepDirection = 'down'
+    stepWorld(world)
+    expect(energy.step).toBeUndefined()
+    expect(energy.value).toBe(100)
+    expect(energy.feedback).toContain('无变轨空间')
+  })
+})
+
+
+describe('pilot command bindings', () => {
+  it('holds boost on Q while Step and Shift gear toggles stay independent', () => {
+    const { input } = createWorld(17)
+    const pilot = createPilotInput(input)
+    const bindings = createBindings(pilot.press, pilot.release)
+    bindings.keyDown('KeyQ', false)
+    expect(input.boostHeld).toBe(true)
+    expect(input.boostPressed).toBe(true)
+    input.boostPressed = false
+    bindings.keyDown('ShiftLeft', false)
+    bindings.keyDown('ShiftRight', false)
+    expect(input.throttle).toBe(2)
+    expect(bindings.keyDown('KeyA', false)).toBe(true)
+    bindings.keyUp('ShiftLeft')
+    bindings.keyUp('ShiftRight')
+    expect(input.stepDirection).toBe('left')
+    expect(input.boostHeld).toBe(true)
+    expect(input.boostPressed).toBe(false)
+    bindings.keyUp('KeyQ')
+    expect(input.boostHeld).toBe(false)
+  })
+
+  it('maps left click to recenter and Space to one shot from the selected gun', () => {
+    const { input } = createWorld(17)
+    const pilot = createPilotInput(input)
+    const bindings = createBindings(action => pilot.press(action, { recenterHeading: 1 }), pilot.release)
+    bindings.keyDown('Digit2', false)
+    expect(bindings.pointerDown(0)).toBe(true)
+    expect(input.recenterHeading).toBe(1)
+    expect(input.fireQueue).toBeUndefined()
+    bindings.keyDown('Space', false)
+    bindings.keyDown('Space', true)
+    expect(input.fireQueue).toEqual([2])
+    expect(input.stepDirection).toBeUndefined()
+    expect(bindings.pointerDown(1)).toBe(false)
+    bindings.keyDown('ShiftLeft', false)
+    bindings.keyDown('ShiftLeft', true)
+    expect(input.throttle).toBe(2)
+    bindings.keyDown('KeyE', false)
+    expect(input.brake).toBe(true)
+    expect(input.throttle).toBe(2)
+    bindings.keyUp('KeyE')
+    expect(input.brake).toBe(false)
+    bindings.reset()
+    pilot.reset()
+    expect(input.fireQueue).toEqual([])
+    expect(input.throttle).toBe(2)
   })
 })

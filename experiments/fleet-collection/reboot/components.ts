@@ -10,29 +10,56 @@ export interface Motion { inertia: number; torque: number; maxTurnRate: number; 
 export interface Gun { arc: number; traverse: number; local: number; aim: number | null; dead: boolean }
 
 /** Control requests after energy limits have been applied. */
-export interface Command { braking?: boolean; brakeFraction?: number; dashFraction?: number; power: number; thrustAngle: number; turn: number }
+export interface Command {
+  power: number
+  thrustAngle: number
+  appliedThrustAngle?: number
+  turn: number
+  recentering?: boolean
+  fullThrust?: boolean
+  bd?: boolean
+  avoidingObstacle?: boolean
+  brakeFraction?: number
+  step?: { angle: number; fraction: number; power: number }
+}
 
-export interface Pilot { scheme: 'manual' }
+export interface Pilot {
+  scheme: 'manual'
+  thrustAngle: number
+  recenterAngle?: number
+  bdCourse?: number
+  boostInterrupted?: boolean
+}
+
+export type StepDirection = 'up' | 'left' | 'down' | 'right'
 
 /** Input sampled from the player controls. */
 export interface Input {
   lockTarget?: number
   brake?: boolean
-  dashRequested?: boolean
+  recenterHeading?: number
+  boostHeld?: boolean
+  boostPressed?: boolean
+  stepDirection?: StepDirection
   fireQueue?: (0 | 1 | 2)[]
   selectedGun?: 0 | 1 | 2
   reverseControl: boolean
   turn: number
-  throttle: 0 | 1 | 2 | 3
+  throttle: 1 | 2
   aim: Vec | null
 }
 
 export interface Pose { x: number; y: number; heading: number; vx: number; vy: number }
 
-export interface DroneGun extends Gun { weaponClass: import('./weapons').WeaponClass; cooldown: number; wavesLeft: number; waveTimer: number; name: string; center: number; side: -1 | 1; target: number }
+export interface DroneGun extends Gun { weaponClass: import('./weapons').WeaponClass; cooldown: number; wavesLeft: number; waveTimer: number; name: string; center: number; side: -1 | 1; target: number; manualTarget?: number }
 
 export interface Projectile { owner?: number; radius: number; x: number; y: number; vx: number; vy: number; life: number; weapon: number }
 
 export interface Recoil { fx: number; fy: number; remaining: number }
 
-export interface Energy { value: number; dashLeft: number; dashCooldown: number; locked: boolean }
+export interface Energy {
+  value: number
+  locked: boolean
+  step?: { angle: number; remaining: number }
+  feedback?: string
+}

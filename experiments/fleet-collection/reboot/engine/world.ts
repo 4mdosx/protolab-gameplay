@@ -1,5 +1,17 @@
-import type { Body, Command, Energy, DroneGun, Input, Motion, Pilot, Pose, Projectile, Recoil, Ship } from '../components'
-import { energySystem } from '../systems/energy'
+import type {
+  Body,
+  Command,
+  Energy,
+  DroneGun,
+  Input,
+  Motion,
+  Pilot,
+  Pose,
+  Projectile,
+  Recoil,
+  Ship,
+} from '../components'
+import { dummyFireSystem, type TrainingDummy } from './dummy'
 import { HANDLING } from '../handling'
 import { SIM_STEP } from './clock'
 import { controlSystem } from '../systems/control'
@@ -12,6 +24,7 @@ import { resolveCharacter } from '../../config'
 export type Id = number
 
 export interface World {
+  trainingDummies: Map<Id, TrainingDummy>
   energy: Map<Id, Energy>
   recoil: Map<Id, Recoil[]>
   projectiles: Projectile[]
@@ -30,7 +43,7 @@ export interface World {
 }
 
 export function manualShip(world: World): Id | undefined {
-  return world.ids.find(id => world.pilot.get(id)?.scheme === 'manual')
+  return world.ids.find((id) => world.pilot.get(id)?.scheme === 'manual')
 }
 
 export function lockedTarget(world: World, id: Id): Body | undefined {
@@ -44,23 +57,31 @@ function snapshot(world: World) {
     const body = world.body.get(id)
     const motion = world.motion.get(id)
     if (!body || !motion) continue
-    world.previous.set(id, { x: body.x, y: body.y, heading: body.heading, vx: motion.velocity.x, vy: motion.velocity.y })
+    world.previous.set(id, {
+      x: body.x,
+      y: body.y,
+      heading: body.heading,
+      vx: motion.velocity.x,
+      vy: motion.velocity.y,
+    })
   }
 }
 
-/** Control, then motion, then the gun, then the map. Each system writes its own components. */
+/** Apply controls and motion before resolving gunfire. New training rounds travel next tick. */
 export function stepWorld(world: World, dt = SIM_STEP) {
   snapshot(world)
-  controlSystem(world)
-  energySystem(world, dt)
+  if (!(dt > 0)) return
+  controlSystem(world, dt)
   motionSystem(world, dt)
-  gunSystem(world, dt)
+  gunSystem(world, dt, world.previous)
+  dummyFireSystem(world, dt)
   citySystem(world)
   world.time = Math.round((world.time + dt) * 10) / 10
 }
 
 export function createWorld(mapSeed = 17): World {
   const world: World = {
+    trainingDummies: new Map(),
     energy: new Map(),
     recoil: new Map(),
     projectiles: [],
@@ -74,7 +95,7 @@ export function createWorld(mapSeed = 17): World {
     command: new Map(),
     previous: new Map(),
     city: generateCity(mapSeed),
-    input: { reverseControl: true, turn: 0, throttle: 0, aim: null },
+    input: { reverseControl: true, turn: 0, throttle: 1, aim: null },
     time: 0,
   }
   const hull = resolveCharacter(0)
@@ -82,10 +103,27 @@ export function createWorld(mapSeed = 17): World {
   world.ids.push(id)
   world.ship.set(id, { name: hull.name, hp: 100 })
   world.body.set(id, { x: 15, y: 25, heading: 0, turnRate: 0, turnEffort: 0 })
-  world.energy.set(id, { value: 100, dashLeft: 0, dashCooldown: 0, locked: false })
+  world.energy.set(id, { value: 100, locked: false })
   world.motion.set(id, { velocity: { x: 0, y: 0 }, ...HANDLING.cruiser })
-  world.drones.set(id, ([-1, 1] as const).map(side => ({ weaponClass: 'cruiser', cooldown: 0, wavesLeft: 0, waveTimer: 0, name: side === -1 ? '主炮' : '副炮', side, center: side * Math.PI / 6, target: 0, local: 0, arc: Math.PI * 40 / 180, traverse: Math.PI / 3, aim: null, dead: false })))
-  world.pilot.set(id, { scheme: 'manual' })
+  world.drones.set(
+    id,
+    ([-1, 1] as const).map((side) => ({
+      weaponClass: 'cruiser',
+      cooldown: 0,
+      wavesLeft: 0,
+      waveTimer: 0,
+      name: side === -1 ? '主炮' : '副炮',
+      side,
+      center: (side * Math.PI) / 6,
+      target: 0,
+      local: 0,
+      arc: (Math.PI * 40) / 180,
+      traverse: Math.PI / 3,
+      aim: null,
+      dead: false,
+    })),
+  )
+  world.pilot.set(id, { scheme: 'manual', thrustAngle: 0 })
   world.command.set(id, { power: 0, thrustAngle: 0, turn: 0 })
   snapshot(world)
   return world

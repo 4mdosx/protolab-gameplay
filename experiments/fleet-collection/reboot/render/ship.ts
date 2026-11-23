@@ -4,18 +4,26 @@ import type { Pose, Vec } from '../components'
 import { flightPoint } from '../../dogfight/projection'
 import { worldToScreen } from './view'
 
-
 function wrap(angle: number) {
   return Math.atan2(Math.sin(angle), Math.cos(angle))
 }
 
-export interface ShipDraw { acceleration: Vec; pose: Pose; thrustAngle: number; power: number; exhaustAngle: number; turnEffort: number; name: string }
+export interface ShipDraw {
+  acceleration: Vec
+  pose: Pose
+  thrustAngle: number
+  power: number
+  exhaustAngle: number
+  turnEffort: number
+  name: string
+}
 
 /** Flight platform HUD, attitude jets and articulated geometric pilot. */
 export function drawShip(ctx: CanvasRenderingContext2D, camera: Camera, ship: ShipDraw) {
   const { width, height } = ctx.canvas
   const { pose } = ship
-  const at = (x: number, y: number) => flightPoint(worldToScreen(camera, width, height, { x, y }), camera.scale)
+  const at = (x: number, y: number) =>
+    flightPoint(worldToScreen(camera, width, height, { x, y }), camera.scale)
   const origin = at(pose.x, pose.y)
   const ground = worldToScreen(camera, width, height, pose)
   ctx.fillStyle = '#69d5d455'
@@ -29,15 +37,21 @@ export function drawShip(ctx: CanvasRenderingContext2D, camera: Camera, ship: Sh
   ctx.lineTo(origin.x, origin.y)
   ctx.stroke()
   ctx.setLineDash([])
-  const rim = (angle: number, radius: number) => at(pose.x + Math.cos(angle) * radius, pose.y + Math.sin(angle) * radius)
+  const rim = (angle: number, radius: number) =>
+    at(pose.x + Math.cos(angle) * radius, pose.y + Math.sin(angle) * radius)
   // Rear armor vulnerability HUD, ±45 degrees around the stern.
-  ctx.beginPath(); ctx.moveTo(origin.x, origin.y)
+  ctx.beginPath()
+  ctx.moveTo(origin.x, origin.y)
   for (let i = 0; i <= 20; i++) {
-    const edge = rim(pose.heading + Math.PI - Math.PI / 4 + i * Math.PI / 40, 5)
+    const edge = rim(pose.heading + Math.PI - Math.PI / 4 + (i * Math.PI) / 40, 5)
     ctx.lineTo(edge.x, edge.y)
   }
-  ctx.closePath(); ctx.fillStyle = '#ff707030'; ctx.fill()
-  ctx.strokeStyle = '#ff707088'; ctx.lineWidth = 1; ctx.stroke()
+  ctx.closePath()
+  ctx.fillStyle = '#ff707030'
+  ctx.fill()
+  ctx.strokeStyle = '#ff707088'
+  ctx.lineWidth = 1
+  ctx.stroke()
   const speed = Math.hypot(pose.vx, pose.vy)
   if (speed > 0.4) {
     const tip = at(pose.x + pose.vx * 0.6, pose.y + pose.vy * 0.6)
@@ -51,14 +65,22 @@ export function drawShip(ctx: CanvasRenderingContext2D, camera: Camera, ship: Sh
   // Opposed attitude jets produce torque; reverse firing brakes angular motion.
   if (Math.abs(ship.turnEffort) > 0.01) {
     ctx.save()
-    ctx.strokeStyle = '#a5e9ff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'
+    ctx.strokeStyle = '#a5e9ff'
+    ctx.lineWidth = 2.5
+    ctx.lineCap = 'round'
     for (const end of [-1, 1]) {
       const x = pose.x + Math.cos(pose.heading) * end * 2.4
       const y = pose.y + Math.sin(pose.heading) * end * 2.4
-      const angle = pose.heading - Math.sign(ship.turnEffort) * end * Math.PI / 2
+      const angle = pose.heading - (Math.sign(ship.turnEffort) * end * Math.PI) / 2
       const start = at(x, y)
-      const tip = at(x + Math.cos(angle) * (0.8 + Math.abs(ship.turnEffort) * 2.5), y + Math.sin(angle) * (0.8 + Math.abs(ship.turnEffort) * 2.5))
-      ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(tip.x, tip.y); ctx.stroke()
+      const tip = at(
+        x + Math.cos(angle) * (0.8 + Math.abs(ship.turnEffort) * 2.5),
+        y + Math.sin(angle) * (0.8 + Math.abs(ship.turnEffort) * 2.5),
+      )
+      ctx.beginPath()
+      ctx.moveTo(start.x, start.y)
+      ctx.lineTo(tip.x, tip.y)
+      ctx.stroke()
     }
     ctx.restore()
   }

@@ -2,7 +2,10 @@
 export const SIM_STEP = 0.1
 const MAX_STEPS = 5
 
-export interface Clock { pending: number; time: number }
+export interface Clock {
+  pending: number
+  time: number
+}
 
 export function createClock(): Clock {
   return { pending: 0, time: 0 }
@@ -12,7 +15,10 @@ export function createClock(): Clock {
  * Real seconds accumulate here. Each full step is one simulation tick.
  * A stalled frame cannot run away with more than a few steps.
  */
-export function advance(clock: Clock, seconds: number): { clock: Clock; steps: number; alpha: number } {
+export function advance(
+  clock: Clock,
+  seconds: number,
+): { clock: Clock; steps: number; alpha: number } {
   let pending = clock.pending + (Number.isFinite(seconds) && seconds > 0 ? seconds : 0)
   let steps = 0
   let time = clock.time

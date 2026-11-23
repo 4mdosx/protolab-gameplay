@@ -30,7 +30,13 @@ export function worldToScreen(camera: Camera, width: number, height: number, poi
   }
 }
 
-export function screenToWorld(camera: Camera, width: number, height: number, sx: number, sy: number): Vec {
+export function screenToWorld(
+  camera: Camera,
+  width: number,
+  height: number,
+  sx: number,
+  sy: number,
+): Vec {
   return {
     x: camera.x + (sx - width / 2) / camera.scale,
     y: camera.y + (sy - height / 2) / (camera.scale * Y_SCALE),
