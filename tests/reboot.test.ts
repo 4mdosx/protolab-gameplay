@@ -1,3 +1,4 @@
+import { spawnDummy, resetDummy } from '../experiments/fleet-collection/reboot/engine/dummy'
 import { cameraScaleForSpeed, followCamera, screenToWorld, worldToScreen } from '../experiments/fleet-collection/reboot/render/view'
 import { gunSystem } from '../experiments/fleet-collection/reboot/systems/gun'
 import { applyHandling, type HandlingId } from '../experiments/fleet-collection/reboot/handling'
@@ -358,5 +359,25 @@ describe('speed camera', () => {
     const screen = worldToScreen(camera, 960, 600, point)
     const restored = screenToWorld(camera, 960, 600, screen.x, screen.y)
     expect(restored.x).toBeCloseTo(point.x); expect(restored.y).toBeCloseTo(point.y)
+  })
+})
+
+describe('enemy training target', () => {
+  it('takes ordinary projectile damage, stays still under player input, and resets', () => {
+    const world = createWorld(17)
+    world.city.buildings = []
+    const player = manualShip(world)!
+    const target = spawnDummy(world, player)
+    const body = world.body.get(target)!
+    const start = { x: body.x, y: body.y }
+    world.projectiles.push({ owner: player, x: body.x - 4, y: body.y, vx: 50, vy: 0, radius: .45, life: 2, weapon: 1 })
+    world.input.turn = 1; world.input.throttle = 3
+    stepWorld(world)
+    expect(world.ship.get(target)!.hp).toBeLessThan(100)
+    expect(body.x).toBe(start.x); expect(body.y).toBe(start.y)
+    expect(world.command.has(target)).toBe(false)
+    resetDummy(world, target)
+    expect(world.ship.get(target)!.hp).toBe(100)
+    expect(world.projectiles).toHaveLength(0)
   })
 })

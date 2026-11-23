@@ -39,13 +39,23 @@ export function drawFrame(ctx: CanvasRenderingContext2D, world: World, camera: C
   for (const box of world.city.buildings) if (box.kind !== 'tower') drawBuilding(ctx, camera, box)
   drawExhaust(ctx, camera, world, id, pose, Math.max(0, world.time - SIM_STEP + alpha * SIM_STEP))
   const towers = world.city.buildings.filter(box => box.kind === 'tower')
-  const order = [...towers.map(box => ({ depth: box.y + box.height, box })), { depth: pose.y, box: null }].sort((a, b) => a.depth - b.depth)
+  const targets = world.ids.filter(other => other !== id && world.body.has(other) && world.ship.has(other))
+  const order = [...towers.map(box => ({ depth: box.y + box.height, box, unit: id })), { depth: pose.y, box: null, unit: id }, ...targets.map(unit => ({ depth: world.body.get(unit)!.y, box: null, unit }))].sort((a, b) => a.depth - b.depth)
   const facades: Facade[] = []
   let mark: { x: number; y: number; depth: number } | null = null
   for (const item of order) {
     if (item.box) {
       const facade = drawBuilding(ctx, camera, item.box)
       if (facade) facades.push(facade)
+    } else if (item.unit !== id) {
+      const target = world.body.get(item.unit)!, info = world.ship.get(item.unit)!
+      ctx.save()
+      if (info.hp <= 0) ctx.globalAlpha = .3
+      drawShip(ctx, camera, { pose: { ...target, vx: 0, vy: 0 }, acceleration: { x: 0, y: 0 }, power: 0, turnEffort: 0, thrustAngle: target.heading, exhaustAngle: target.heading + Math.PI, name: `${info.name} · ${info.hp <= 0 ? '已击破' : 'HP ' + info.hp}` })
+      const p = flightPoint(worldToScreen(camera, ctx.canvas.width, ctx.canvas.height, target), camera.scale)
+      ctx.fillStyle = '#402b33'; ctx.fillRect(p.x - 20, p.y - 24, 40, 4)
+      ctx.fillStyle = '#ff8d7a'; ctx.fillRect(p.x - 20, p.y - 24, 40 * info.hp / 100, 4)
+      ctx.restore()
     } else {
       const dash = world.dashVisual.get(id)
       if (dash) {
