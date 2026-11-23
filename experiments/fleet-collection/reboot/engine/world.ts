@@ -1,4 +1,4 @@
-import type { Body, Command, DashVisual, Energy, DroneGun, Input, Motion, Pilot, Pose, Projectile, Recoil, Ship } from '../components'
+import type { Body, Command, Energy, DroneGun, Input, Motion, Pilot, Pose, Projectile, Recoil, Ship } from '../components'
 import { energySystem } from '../systems/energy'
 import { HANDLING } from '../handling'
 import { SIM_STEP } from './clock'
@@ -12,7 +12,6 @@ import { resolveCharacter } from '../../config'
 export type Id = number
 
 export interface World {
-  dashVisual: Map<Id, DashVisual>
   energy: Map<Id, Energy>
   recoil: Map<Id, Recoil[]>
   projectiles: Projectile[]
@@ -32,6 +31,12 @@ export interface World {
 
 export function manualShip(world: World): Id | undefined {
   return world.ids.find(id => world.pilot.get(id)?.scheme === 'manual')
+}
+
+export function lockedTarget(world: World, id: Id): Body | undefined {
+  const target = world.input.lockTarget
+  if (world.pilot.get(id)?.scheme !== 'manual' || target === undefined || target === id) return
+  if ((world.ship.get(target)?.hp ?? 0) > 0) return world.body.get(target)
 }
 
 function snapshot(world: World) {
@@ -56,7 +61,6 @@ export function stepWorld(world: World, dt = SIM_STEP) {
 
 export function createWorld(mapSeed = 17): World {
   const world: World = {
-    dashVisual: new Map(),
     energy: new Map(),
     recoil: new Map(),
     projectiles: [],

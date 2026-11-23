@@ -1,4 +1,4 @@
-import type { World } from '../engine/world'
+import { lockedTarget, type World } from '../engine/world'
 import { damageShip, segmentCircle } from './hit'
 import { BARRAGES } from '../weapons'
 import { terrainImpact } from '../../dogfight/terrain'
@@ -15,7 +15,7 @@ export function gunSystem(world: World, dt: number) {
     let first = wall ?? Infinity
     let target: number | undefined
     for (const id of world.ids) {
-      if (shot.owner === id || (world.ship.get(id)?.hp ?? 0) <= 0 || (world.dashVisual.get(id)?.evade ?? 0) > 0) continue
+      if (shot.owner === id || (world.ship.get(id)?.hp ?? 0) <= 0) continue
       const body = world.body.get(id)
       if (!body) continue
       const hit = segmentCircle(shot, next, body, 2 + shot.radius)
@@ -30,12 +30,14 @@ export function gunSystem(world: World, dt: number) {
   for (const id of world.ids) {
     const body = world.body.get(id)
     if (!body) continue
+    const targetAim = lockedTarget(world, id)
     for (const [index, drone] of (world.drones.get(id) ?? []).entries()) {
-      if (world.input.selectedGun === index + 1 && world.input.aim) {
+      const aim = targetAim ?? (world.input.selectedGun === index + 1 ? world.input.aim : null)
+      if (aim) {
         const sideAngle = body.heading + drone.side * Math.PI / 2
         const x = body.x + Math.cos(sideAngle) * 4.5
         const y = body.y + Math.sin(sideAngle) * 4.5
-        drone.target = wrap(Math.atan2(world.input.aim.y - y, world.input.aim.x - x) - body.heading)
+        drone.target = wrap(Math.atan2(aim.y - y, aim.x - x) - body.heading)
       }
       drone.dead = Math.abs(wrap(drone.target - drone.center)) > drone.arc
       const target = drone.center + clamp(wrap(drone.target - drone.center), -drone.arc, drone.arc)

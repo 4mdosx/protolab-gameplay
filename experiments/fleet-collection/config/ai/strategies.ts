@@ -1,17 +1,19 @@
 import type { AiCondition, AiTactic, StateNode, Strategy, StrategyBase } from '../types'
 
+type PriorityBranch = { when: readonly AiCondition[]; tactic: AiTactic }
+
 /** Priority list: the first matching branch wins, same as a hierarchical state machine. */
-function tree(id: string, branches: { when: AiCondition[]; tactic: AiTactic }[]): { root: string; states: StateNode[] } {
+function tree(id: string, branches: readonly PriorityBranch[]): { root: string; states: StateNode[] } {
   const root = `${id}-root`
   return {
     root,
     states: [
-      { id: root, tactic: 'search', branches: branches.map((branch, index) => ({ when: branch.when, to: `${id}-${index}` })) },
+      { id: root, tactic: 'search', branches: branches.map((branch, index) => ({ when: [...branch.when], to: `${id}-${index}` })) },
       ...branches.map((branch, index) => ({ id: `${id}-${index}`, tactic: branch.tactic, branches: [] })),
     ],
   }
 }
-function strategy(id: string, name: string, shipClass: Strategy['shipClass'], base: StrategyBase, branches: { when: AiCondition[]; tactic: AiTactic }[]): Strategy {
+function strategy(id: string, name: string, shipClass: Strategy['shipClass'], base: StrategyBase, branches: readonly PriorityBranch[]): Strategy {
   return { id, name, shipClass, base, ...tree(id, branches) }
 }
 

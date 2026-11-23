@@ -5,7 +5,7 @@ export type { Camera }
 
 const Y_SCALE = 0.78
 
-/** Absolute speed mapping shared by all hulls; dash displacement itself does not trigger zoom. */
+/** Absolute speed mapping shared by all hulls. */
 export function cameraScaleForSpeed(speed: number): number {
   const t = Math.max(0, Math.min(1, (speed - 8) / 52))
   const eased = t * t * (3 - 2 * t)

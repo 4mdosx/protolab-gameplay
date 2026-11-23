@@ -13,7 +13,6 @@ export function energySystem(world: World, dt: number) {
     if (state.locked && state.value >= 20) state.locked = false
     const braking = !!world.input.brake
     if (dashRequested && !braking && !state.locked && state.dashCooldown === 0 && state.value >= ENERGY.dashCost) {
-      command.dashStep = motion.dashDistance
       state.value -= ENERGY.dashCost
       state.dashLeft = ENERGY.dashDuration
       state.dashCooldown = ENERGY.dashCooldown

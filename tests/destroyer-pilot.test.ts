@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { createDogfight, stepDogfight } from '../experiments/fleet-collection/dogfight/model'
 import { moveHull } from '../experiments/fleet-collection/dogfight/motion/move-system'
-import { setMovementCommand, steerDestroyer } from '../experiments/fleet-collection/dogfight/ai/steering'
+import { setMovementCommand, steerDestroyer, type MovementCommand } from '../experiments/fleet-collection/dogfight/ai/steering'
 import { resolveCharacter } from '../experiments/fleet-collection/config'
 
 describe('destroyer pilot', () => {
   it('tracks velocity toward the command while the hull turns separately', () => {
-    const store = {}
+    const store: Record<string, MovementCommand> = {}
     setMovementCommand(store, 'blue-0', { desiredVelocity: { x: 0, y: 15 }, desiredFacing: 0, maneuver: 'orbit_left' })
     const command = store['blue-0']
     const step = moveHull({

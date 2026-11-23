@@ -1,7 +1,6 @@
 import type { Camera } from '../../dogfight/camera'
 import type { Id, World } from '../engine/world'
 import { drawBuilding, drawTerrain, type Facade } from './city'
-import { drawHumanoid } from './humanoid'
 import { drawShip, lerpPose } from './ship'
 import { flightPoint } from '../../dogfight/projection'
 import { worldToScreen } from './view'
@@ -57,20 +56,6 @@ export function drawFrame(ctx: CanvasRenderingContext2D, world: World, camera: C
       ctx.fillStyle = '#ff8d7a'; ctx.fillRect(p.x - 20, p.y - 24, 40 * info.hp / 100, 4)
       ctx.restore()
     } else {
-      const dash = world.dashVisual.get(id)
-      if (dash) {
-        ctx.save()
-        for (let i = 0; i <= 5; i++) {
-          const t = i / 5
-          ctx.globalAlpha = dash.life / 0.35 * (0.15 + t * 0.4)
-          drawHumanoid(ctx, camera, { ...pose, x: dash.from.x + (dash.to.x - dash.from.x) * t, y: dash.from.y + (dash.to.y - dash.from.y) * t, heading: dash.heading }, reaction, true, exhaustAngle)
-        }
-        if (dash.evade > 0) {
-          const p = flightPoint(worldToScreen(camera, ctx.canvas.width, ctx.canvas.height, pose), camera.scale)
-          ctx.globalAlpha = 0.8; ctx.beginPath(); ctx.ellipse(p.x, p.y, 17, 13, 0, 0, Math.PI * 2); ctx.stroke()
-        }
-        ctx.restore()
-      }
       drawDrones(ctx, camera, world, id, pose)
       mark = drawShip(ctx, camera, { pose, acceleration: reaction, turnEffort: body.turnEffort, name: ship.name, thrustAngle: world.command.get(id)?.thrustAngle ?? 0, exhaustAngle, power: nozzlePower })
     }

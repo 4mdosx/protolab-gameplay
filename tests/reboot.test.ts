@@ -280,46 +280,60 @@ describe('reboot destroyer', () => {
     expect(energy.dashLeft).toBe(0)
   })
 
-  it('gives destroyers one extra dash displacement and stops at towers', () => {
-    for (const wall of [false, true]) {
-      const world = createWorld(17)
-      const id = manualShip(world)!
-      applyHandling(world, id, 'destroyer')
-      const body = world.body.get(id)!
-      const x = body.x
-      world.city.buildings = wall ? [{ id: 'dash-wall', x: x + 5, y: body.y - 10, width: 2, height: 20, blocks: ['surface'], kind: 'tower' }] : []
-      world.input = { reverseControl: true, turn: 0, throttle: 0, dashRequested: true, aim: { x: x + 100, y: body.y } }
-      stepWorld(world)
-      if (wall) expect(body.x).toBeLessThan(x + 3)
-      else expect(body.x).toBeGreaterThan(x + 8)
-      expect(world.motion.get(id)!.velocity.x).toBeLessThan(10)
-      expect(world.command.get(id)!.dashStep).toBe(0)
-      expect(world.energy.get(id)!.value).toBe(75)
-    }
-  })
-
-  it('protects the destroyer landing briefly but not the transit or later impacts', () => {
-    for (const transit of [false, true]) {
+  it('uses physical thrust for every hull and keeps dash vulnerable to gunfire', () => {
+    for (const hull of ['destroyer', 'cruiser', 'battleship'] as const) {
       const world = createWorld(17)
       world.city.buildings = []
       const id = manualShip(world)!
-      applyHandling(world, id, 'destroyer')
+      applyHandling(world, id, hull)
       const body = world.body.get(id)!
-      world.projectiles.push({ x: body.x + (transit ? 4 : 8), y: body.y, vx: 0, vy: 0, radius: .1, life: 3, weapon: 1 })
-      world.input = { reverseControl: true, turn: 0, throttle: 0, dashRequested: true, aim: { x: body.x + 100, y: body.y } }
+      const start = body.x
+      const motion = world.motion.get(id)!
+      world.projectiles.push({ x: start + 1, y: body.y, vx: 0, vy: 0, radius: .1, life: 3, weapon: 1 })
+      world.input = { reverseControl: true, turn: 0, throttle: 0, dashRequested: true, aim: { x: start + 100, y: body.y } }
       stepWorld(world)
-      if (transit) expect(world.ship.get(id)!.hp).toBeLessThan(100)
-      else expect(world.ship.get(id)!.hp).toBe(100)
-      expect(world.dashVisual.get(id)!.evade).toBeGreaterThan(0)
-      if (!transit) {
-        motionSystem(world, .13)
-        expect(world.dashVisual.get(id)!.evade).toBe(0)
-        world.projectiles[0].x = body.x
-        world.projectiles[0].y = body.y
-        gunSystem(world, .1)
-        expect(world.ship.get(id)!.hp).toBeLessThan(100)
-      }
+      expect(body.x).toBeGreaterThan(start)
+      expect(body.x - start).toBeLessThanOrEqual(motion.thrust / motion.mass * 2.5 * SIM_STEP ** 2)
+      expect(world.energy.get(id)!.value).toBe(75)
+      expect(world.ship.get(id)!.hp).toBeLessThan(100)
     }
+  })
+
+  it('tracks a live target while keeping propulsion and firing under player control', () => {
+    const world = createWorld(17)
+    world.city.buildings = []
+    const id = manualShip(world)!
+    const target = spawnDummy(world, id)
+    const body = world.body.get(id)!
+    Object.assign(world.body.get(target)!, { x: body.x + 25, y: body.y + 15 })
+    world.input = {
+      lockTarget: target, reverseControl: true, turn: 0, throttle: 1,
+      selectedGun: 1, aim: { x: body.x - 20, y: body.y },
+    }
+    stepWorld(world)
+    expect(body.heading).toBeGreaterThan(0)
+    expect(world.command.get(id)!.thrustAngle).toBeCloseTo(Math.PI)
+    expect(world.drones.get(id)!.every(gun => gun.target > 0)).toBe(true)
+    expect(world.projectiles).toHaveLength(0)
+    world.ship.get(target)!.hp = 0
+    stepWorld(world)
+    expect(world.command.get(id)!.turn).toBe(0)
+  })
+
+  it('coasts broadside in neutral and recovers energy', () => {
+    const world = createWorld(17)
+    world.city.buildings = []
+    const id = manualShip(world)!
+    const body = world.body.get(id)!
+    const start = body.y
+    const motion = world.motion.get(id)!
+    motion.velocity = { x: 0, y: 20 }
+    world.energy.get(id)!.value = 30
+    for (let i = 0; i < 30; i++) stepWorld(world)
+    expect(motion.velocity.y).toBeGreaterThan(8)
+    expect(motion.velocity.y).toBeLessThan(20)
+    expect(body.y - start).toBeGreaterThan(30)
+    expect(world.energy.get(id)!.value).toBeCloseTo(72)
   })
 
   it('does not sail through a tower', () => {
